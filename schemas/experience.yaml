@@ -1,0 +1,100 @@
+experience:
+  type: object
+  required:
+    - id
+    - task_type
+    - created_at
+    - source_signal
+    - confidence
+    - verification_count
+    - scene
+    - root_cause
+    - resolution
+    - meta_insight
+  properties:
+    id:
+      type: string
+      pattern: "^exp-\\d{3,}$"
+    task_type:
+      type: string
+      enum:
+        - coding
+        - devops
+        - writing
+        - debugging
+        - configuration
+        - _unclassified
+    created_at:
+      type: string
+      format: date-time
+    source_signal:
+      type: string
+      description: "References the originating signal_id"
+    source_session:
+      type: string
+      description: "UUID of the source session for full context retrieval"
+    source_memory:
+      type: string
+      format: date
+    confidence:
+      type: number
+      minimum: 0.0
+      maximum: 1.0
+      default: 0.6
+    verification_count:
+      type: integer
+      minimum: 0
+      default: 1
+    scene:
+      type: string
+    failure_signature:
+      type: string
+      nullable: true
+    root_cause:
+      type: string
+    resolution:
+      type: string
+    meta_insight:
+      type: string
+    related_exps:
+      type: array
+      items:
+        type: string
+      default: []
+    promoted_to:
+      type: string
+      nullable: true
+      description: "Taxonomy entry ID if this experience was promoted"
+
+index:
+  type: object
+  description: "experience_pool/index.yaml - maps task types to experience clusters"
+  properties:
+    last_updated:
+      type: string
+      format: date-time
+    clusters:
+      type: array
+      items:
+        type: object
+        required:
+          - cluster_id
+          - task_type
+          - failure_signature_pattern
+          - experience_ids
+        properties:
+          cluster_id:
+            type: string
+            pattern: "^clust-\\d{3,}$"
+          task_type:
+            type: string
+          failure_signature_pattern:
+            type: string
+            description: "Representative failure signature for this cluster"
+          experience_ids:
+            type: array
+            items:
+              type: string
+          promoted_to_taxonomy:
+            type: string
+            nullable: true

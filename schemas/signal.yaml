@@ -1,0 +1,57 @@
+signal:
+  type: object
+  required:
+    - signal_id
+    - timestamp
+    - session_id
+    - trigger_reason
+    - keywords
+    - task_summary
+    - step_count
+  properties:
+    signal_id:
+      type: string
+      pattern: "^sig-\\d{8}-\\d{3,}$"
+      description: "Unique signal identifier, format: sig-YYYYMMDD-NNN"
+    timestamp:
+      type: string
+      format: date-time
+    session_id:
+      type: string
+      description: "UUID of the source session (maps to agents/main/sessions/{uuid}.jsonl)"
+    memory_date:
+      type: string
+      format: date
+      description: "Date key for memory/YYYY-MM-DD.md (optional supplementary context)"
+    trigger_reason:
+      type: string
+      enum:
+        - error_recovery
+        - user_correction
+        - new_tool
+        - efficiency_anomaly
+    keywords:
+      type: array
+      items:
+        type: string
+      minItems: 1
+    task_summary:
+      type: string
+      maxLength: 200
+    error_snapshot:
+      type: string
+      nullable: true
+      description: "Populated only when trigger_reason is error_recovery"
+    resolution_snapshot:
+      type: string
+      nullable: true
+    user_feedback:
+      type: string
+      nullable: true
+    step_count:
+      type: integer
+      minimum: 1
+    processed:
+      type: boolean
+      default: false
+      description: "Set to true after Layer 2 materialization"

@@ -1,0 +1,105 @@
+from __future__ import annotations
+
+from datetime import datetime
+
+from meta_learning.shared.io import next_signal_id, write_signal
+from meta_learning.shared.models import (
+    MetaLearningConfig,
+    Signal,
+    TaskContext,
+    TriggerReason,
+)
+
+
+class SignalCapture:
+    def __init__(self, config: MetaLearningConfig) -> None:
+        self._config = config
+
+    def evaluate_and_capture(self, context: TaskContext) -> Signal | None:
+        trigger = self._determine_trigger(context)
+        if trigger is None:
+            return None
+
+        signal = self._build_signal(context, trigger)
+        write_signal(signal, self._config)
+        return signal
+
+    def _determine_trigger(self, context: TaskContext) -> TriggerReason | None:
+        if context.errors_fixed and context.errors_encountered:
+            return TriggerReason.ERROR_RECOVERY
+
+        if context.user_corrections:
+            return TriggerReason.USER_CORRECTION
+
+        if context.new_tools:
+            return TriggerReason.NEW_TOOL
+
+        threshold = self._config.layer1.signal_capture.efficiency_anomaly_threshold
+        avg = self._config.layer1.signal_capture.average_step_count
+        if context.step_count > avg * threshold:
+            return TriggerReason.EFFICIENCY_ANOMALY
+
+        return None
+
+    def _build_signal(self, context: TaskContext, trigger: TriggerReason) -> Signal:
+        sig_id = next_signal_id(self._config)
+
+        keywords = _extract_keywords(context)
+
+        error_snapshot: str | None = None
+        if trigger == TriggerReason.ERROR_RECOVERY and context.errors_encountered:
+            error_snapshot = context.errors_encountered[0][:500]
+
+        resolution_snapshot: str | None = None
+        if context.extra.get("resolution"):
+            resolution_snapshot = str(context.extra["resolution"])[:200]
+
+        user_feedback: str | None = None
+        if context.user_corrections:
+            user_feedback = context.user_corrections[0][:500]
+
+        return Signal(
+            signal_id=sig_id,
+            timestamp=datetime.now(),
+            session_id=context.session_id or "unknown",
+            memory_date=datetime.now().date(),
+            trigger_reason=trigger,
+            keywords=keywords,
+            task_summary=context.task_description[:200],
+            error_snapshot=error_snapshot,
+            resolution_snapshot=resolution_snapshot,
+            user_feedback=user_feedback,
+            step_count=context.step_count,
+        )
+
+
+def _extract_keywords(context: TaskContext) -> list[str]:
+    keywords: list[str] = []
+
+    for error in context.errors_encountered[:3]:
+        tokens = error.split()
+        for token in tokens:
+            cleaned = token.strip(".:,;()[]{}\"'")
+            if (
+                len(cleaned) > 2
+                and (cleaned[0].isupper() or any(c.isdigit() for c in cleaned))
+                and cleaned not in keywords
+            ):
+                keywords.append(cleaned)
+                if len(keywords) >= 10:
+                    break
+
+    for tool in context.new_tools:
+        if tool not in keywords:
+            keywords.append(tool)
+
+    if not keywords:
+        words = context.task_description.split()
+        for w in words:
+            cleaned = w.strip(".:,;()[]{}\"'").lower()
+            if len(cleaned) > 3 and cleaned not in keywords:
+                keywords.append(cleaned)
+                if len(keywords) >= 5:
+                    break
+
+    return keywords[:15]

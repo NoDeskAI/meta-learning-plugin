@@ -1,0 +1,273 @@
+from __future__ import annotations
+
+import json
+import threading
+from datetime import datetime
+from pathlib import Path
+
+import yaml
+
+from meta_learning.shared.models import (
+    ErrorTaxonomy,
+    Experience,
+    ExperienceIndex,
+    Layer3Result,
+    MetaLearningConfig,
+    Signal,
+    TaxonomyEntry,
+)
+
+
+def load_config(config_path: str | Path) -> MetaLearningConfig:
+    path = Path(config_path)
+    if not path.exists():
+        return MetaLearningConfig()
+    with open(path) as f:
+        raw = yaml.safe_load(f) or {}
+    return MetaLearningConfig(**raw)
+
+
+def ensure_directories(config: MetaLearningConfig) -> None:
+    for dir_path in [
+        config.signal_buffer_path,
+        config.experience_pool_path,
+    ]:
+        Path(dir_path).mkdir(parents=True, exist_ok=True)
+
+
+def write_signal(signal: Signal, config: MetaLearningConfig) -> Path:
+    ensure_directories(config)
+    buf_dir = Path(config.signal_buffer_path)
+    file_path = buf_dir / f"{signal.signal_id}.yaml"
+    data = signal.model_dump(mode="json")
+    with open(file_path, "w") as f:
+        yaml.dump(data, f, default_flow_style=False, allow_unicode=True)
+    return file_path
+
+
+def read_signal(file_path: str | Path) -> Signal:
+    with open(file_path) as f:
+        raw = yaml.safe_load(f)
+    return Signal(**raw)
+
+
+def list_pending_signals(config: MetaLearningConfig) -> list[Signal]:
+    buf_dir = Path(config.signal_buffer_path)
+    if not buf_dir.exists():
+        return []
+    signals = []
+    for p in sorted(buf_dir.glob("sig-*.yaml")):
+        sig = read_signal(p)
+        if not sig.processed:
+            signals.append(sig)
+    return signals
+
+
+def mark_signal_processed(signal_id: str, config: MetaLearningConfig) -> None:
+    buf_dir = Path(config.signal_buffer_path)
+    file_path = buf_dir / f"{signal_id}.yaml"
+    if not file_path.exists():
+        return
+    sig = read_signal(file_path)
+    sig.processed = True
+    write_signal(sig, config)
+
+
+def write_experience(experience: Experience, config: MetaLearningConfig) -> Path:
+    pool_dir = Path(config.experience_pool_path)
+    type_dir = pool_dir / experience.task_type.value
+    type_dir.mkdir(parents=True, exist_ok=True)
+    file_path = type_dir / f"{experience.id}.yaml"
+    data = experience.model_dump(mode="json")
+    with open(file_path, "w") as f:
+        yaml.dump(data, f, default_flow_style=False, allow_unicode=True)
+    return file_path
+
+
+def read_experience(file_path: str | Path) -> Experience:
+    with open(file_path) as f:
+        raw = yaml.safe_load(f)
+    return Experience(**raw)
+
+
+def list_all_experiences(config: MetaLearningConfig) -> list[Experience]:
+    pool_dir = Path(config.experience_pool_path)
+    if not pool_dir.exists():
+        return []
+    experiences = []
+    for p in pool_dir.rglob("exp-*.yaml"):
+        experiences.append(read_experience(p))
+    return experiences
+
+
+def load_experience_index(config: MetaLearningConfig) -> ExperienceIndex:
+    pool_dir = Path(config.experience_pool_path)
+    index_path = pool_dir / "index.yaml"
+    if not index_path.exists():
+        return ExperienceIndex(last_updated=datetime.now())
+    with open(index_path) as f:
+        raw = yaml.safe_load(f) or {}
+    return ExperienceIndex(**raw)
+
+
+def save_experience_index(index: ExperienceIndex, config: MetaLearningConfig) -> Path:
+    pool_dir = Path(config.experience_pool_path)
+    pool_dir.mkdir(parents=True, exist_ok=True)
+    index_path = pool_dir / "index.yaml"
+    data = index.model_dump(mode="json")
+    with open(index_path, "w") as f:
+        yaml.dump(data, f, default_flow_style=False, allow_unicode=True)
+    return index_path
+
+
+def load_error_taxonomy(config: MetaLearningConfig) -> ErrorTaxonomy:
+    tax_path = Path(config.error_taxonomy_full_path)
+    if not tax_path.exists():
+        return ErrorTaxonomy()
+    with open(tax_path) as f:
+        raw = yaml.safe_load(f) or {}
+    if "taxonomy" not in raw:
+        return ErrorTaxonomy()
+    taxonomy_data: dict = raw["taxonomy"]
+    result: dict[str, dict[str, list[TaxonomyEntry]]] = {}
+    for domain, subdomains in taxonomy_data.items():
+        result[domain] = {}
+        for subdomain, entries in subdomains.items():
+            result[domain][subdomain] = [TaxonomyEntry(**e) for e in entries]
+    return ErrorTaxonomy(taxonomy=result)
+
+
+def save_error_taxonomy(taxonomy: ErrorTaxonomy, config: MetaLearningConfig) -> Path:
+    tax_path = Path(config.error_taxonomy_full_path)
+    tax_path.parent.mkdir(parents=True, exist_ok=True)
+    data = {"taxonomy": {}}
+    for domain, subdomains in taxonomy.taxonomy.items():
+        data["taxonomy"][domain] = {}
+        for subdomain, entries in subdomains.items():
+            data["taxonomy"][domain][subdomain] = [
+                e.model_dump(mode="json") for e in entries
+            ]
+    with open(tax_path, "w") as f:
+        yaml.dump(data, f, default_flow_style=False, allow_unicode=True)
+    return tax_path
+
+
+def read_session_context(
+    session_id: str, config: MetaLearningConfig, max_lines: int = 200
+) -> str:
+    sessions_dir = Path(config.sessions_full_path)
+    session_file = sessions_dir / f"{session_id}.jsonl"
+    if not session_file.exists():
+        return f"Session {session_id} not found"
+    lines = []
+    with open(session_file) as f:
+        for i, line in enumerate(f):
+            if i >= max_lines:
+                break
+            try:
+                record = json.loads(line.strip())
+                role = record.get("role", "unknown")
+                content = record.get("content", "")
+                if isinstance(content, str) and content.strip():
+                    lines.append(f"[{role}] {content[:500]}")
+            except json.JSONDecodeError:
+                continue
+    return "\n".join(lines) if lines else f"Session {session_id}: no readable content"
+
+
+class _IdCounter:
+    """Thread-safe in-memory ID counter with filesystem bootstrap."""
+
+    def __init__(self) -> None:
+        self._lock = threading.Lock()
+        self._signal_counts: dict[str, int] = {}
+        self._experience_counts: dict[str, int] = {}
+
+    def next_signal_id(self, config: MetaLearningConfig) -> str:
+        buf_dir = Path(config.signal_buffer_path)
+        today = datetime.now().strftime("%Y%m%d")
+        cache_key = f"{buf_dir}:{today}"
+
+        with self._lock:
+            if cache_key not in self._signal_counts:
+                existing = (
+                    list(buf_dir.glob(f"sig-{today}-*.yaml"))
+                    if buf_dir.exists()
+                    else []
+                )
+                self._signal_counts[cache_key] = len(existing)
+            self._signal_counts[cache_key] += 1
+            num = self._signal_counts[cache_key]
+        return f"sig-{today}-{num:03d}"
+
+    def next_experience_id(self, config: MetaLearningConfig) -> str:
+        pool_dir = Path(config.experience_pool_path)
+        cache_key = str(pool_dir)
+
+        with self._lock:
+            if cache_key not in self._experience_counts:
+                existing = (
+                    list(pool_dir.rglob("exp-*.yaml")) if pool_dir.exists() else []
+                )
+                self._experience_counts[cache_key] = len(existing)
+            self._experience_counts[cache_key] += 1
+            num = self._experience_counts[cache_key]
+        return f"exp-{num:03d}"
+
+    def reset(self) -> None:
+        with self._lock:
+            self._signal_counts.clear()
+            self._experience_counts.clear()
+
+
+_id_counter = _IdCounter()
+
+
+def next_signal_id(config: MetaLearningConfig) -> str:
+    return _id_counter.next_signal_id(config)
+
+
+def next_experience_id(config: MetaLearningConfig) -> str:
+    return _id_counter.next_experience_id(config)
+
+
+def reset_id_counters() -> None:
+    _id_counter.reset()
+
+
+def next_cluster_id(index: ExperienceIndex) -> str:
+    next_num = len(index.clusters) + 1
+    return f"clust-{next_num:03d}"
+
+
+def next_taxonomy_id(taxonomy: ErrorTaxonomy, domain_prefix: str) -> str:
+    existing = [
+        e for e in taxonomy.all_entries() if e.id.startswith(f"tax-{domain_prefix}")
+    ]
+    next_num = len(existing) + 1
+    return f"tax-{domain_prefix}-{next_num:03d}"
+
+
+def save_layer3_result(result: Layer3Result, config: MetaLearningConfig) -> Path:
+    workspace = Path(config.resolve_workspace_path("layer3_results"))
+    workspace.mkdir(parents=True, exist_ok=True)
+    ts = result.timestamp.strftime("%Y%m%d_%H%M%S")
+    file_path = workspace / f"l3-result-{ts}.yaml"
+    data = result.model_dump(mode="json")
+    with open(file_path, "w") as f:
+        yaml.dump(data, f, default_flow_style=False, allow_unicode=True)
+    return file_path
+
+
+def load_latest_layer3_result(
+    config: MetaLearningConfig,
+) -> Layer3Result | None:
+    workspace = Path(config.resolve_workspace_path("layer3_results"))
+    if not workspace.exists():
+        return None
+    files = sorted(workspace.glob("l3-result-*.yaml"), reverse=True)
+    if not files:
+        return None
+    with open(files[0]) as f:
+        raw = yaml.safe_load(f) or {}
+    return Layer3Result(**raw)

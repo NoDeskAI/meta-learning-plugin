@@ -1,0 +1,17 @@
+__pycache__/
+*.py[cod]
+*$py.class
+venv/
+.env
+.pytest_cache/
+.coverage
+htmlcov/
+*.log
+workspace/
+sessions/
+signal_buffer/
+experience_pool/
+error_taxonomy.yaml
+growth-plan.yaml
+mock_data/
+temp_test_*/

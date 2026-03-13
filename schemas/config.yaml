@@ -1,0 +1,137 @@
+meta_learning:
+  type: object
+  required:
+    - workspace_root
+    - sessions_root
+  properties:
+    workspace_root:
+      type: string
+      description: "Path to OpenClaw workspace root (e.g. ~/.openclaw/workspace)"
+      default: "~/.openclaw/workspace"
+    sessions_root:
+      type: string
+      description: "Path to session JSONL files (e.g. ~/.openclaw/agents/main/sessions)"
+      default: "~/.openclaw/agents/main/sessions"
+
+    signal_buffer_dir:
+      type: string
+      default: "signal_buffer"
+      description: "Relative to workspace_root"
+    experience_pool_dir:
+      type: string
+      default: "experience_pool"
+      description: "Relative to workspace_root"
+    error_taxonomy_path:
+      type: string
+      default: "error_taxonomy.yaml"
+      description: "Relative to workspace_root"
+    skills_dir:
+      type: string
+      default: "skills"
+      description: "Relative to workspace_root"
+
+    layer1:
+      type: object
+      properties:
+        quick_think:
+          type: object
+          properties:
+            irreversible_keywords:
+              type: array
+              items:
+                type: string
+              default:
+                - "rm -rf"
+                - "drop table"
+                - "force push"
+                - "git push --force"
+                - "DELETE FROM"
+                - "overwrite"
+                - "truncate"
+                - "format disk"
+                - "fdisk"
+                - "mkfs"
+            max_latency_ms:
+              type: integer
+              default: 50
+        signal_capture:
+          type: object
+          properties:
+            efficiency_anomaly_threshold:
+              type: number
+              default: 2.0
+              description: "Multiplier over average step count to flag as anomaly"
+            average_step_count:
+              type: integer
+              default: 5
+              description: "Baseline average step count for comparison"
+
+    layer2:
+      type: object
+      properties:
+        trigger:
+          type: object
+          properties:
+            min_pending_signals:
+              type: integer
+              default: 5
+            max_hours_since_last:
+              type: integer
+              default: 24
+        materialize:
+          type: object
+          properties:
+            initial_confidence:
+              type: number
+              default: 0.6
+        consolidate:
+          type: object
+          properties:
+            min_cluster_size_for_taxonomy:
+              type: integer
+              default: 3
+        taxonomy:
+          type: object
+          properties:
+            min_confidence_for_skill:
+              type: number
+              default: 0.8
+            min_source_exps_for_skill:
+              type: integer
+              default: 5
+
+    confidence:
+      type: object
+      properties:
+        hit_success_boost:
+          type: number
+          default: 0.1
+        contradiction_penalty:
+          type: number
+          default: 0.2
+        prune_threshold:
+          type: number
+          default: 0.3
+        promote_threshold:
+          type: number
+          default: 0.8
+
+    llm:
+      type: object
+      properties:
+        provider:
+          type: string
+          enum:
+            - stub
+            - openai
+            - anthropic
+          default: "stub"
+        model:
+          type: string
+          default: "gpt-4o"
+        temperature:
+          type: number
+          default: 0.3
+        max_tokens:
+          type: integer
+          default: 2000
