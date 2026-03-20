@@ -1,0 +1,12 @@
+{
+  "mcpServers": {
+    "meta-learning": {
+      "command": "${workspaceFolder}/venv/bin/python3",
+      "args": ["-m", "meta_learning.mcp_server"],
+      "env": {
+        "META_LEARNING_WORKSPACE": "${workspaceFolder}",
+        "META_LEARNING_CONFIG": "${workspaceFolder}/config.yaml"
+      }
+    }
+  }
+}

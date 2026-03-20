@@ -1,0 +1,33 @@
+---
+description: Meta-learning system integration — when and how to use quick_think and capture_signal MCP tools
+globs:
+alwaysApply: true
+---
+
+# Meta-Learning MCP Tools
+
+This workspace has a meta-learning MCP server that helps you avoid known mistakes and learn from new ones.
+
+## Before Executing Risky Tasks
+
+Call the `quick_think` tool when you are about to:
+- Run destructive commands (rm, drop, truncate, force push, overwrite)
+- Work in an area where errors have occurred before
+- Use an unfamiliar tool or API for the first time
+
+Pass the user's task description as `user_message` and the tools you plan to use as `tools_used`.
+If a risk warning is returned, follow its guidance (e.g. create a rollback plan).
+
+## After Completing a Task
+
+Call the `capture_signal` tool when the task involved any of these:
+- You encountered errors and fixed them → set `errors_encountered` and `errors_fixed=true`
+- The user corrected your approach → set `user_corrections`
+- You used a new/unfamiliar tool → set `new_tools`
+- The task required many steps (> 10 tool calls) → set `step_count`
+
+This records a learning signal so the system can improve over time.
+
+## Checking System Status
+
+Use the `status` tool to see pending signals, experience counts, and taxonomy entries. Useful during heartbeat checks or when the user asks about the learning system state.

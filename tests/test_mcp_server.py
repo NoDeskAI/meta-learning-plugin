@@ -1,0 +1,291 @@
+"""Tests for the MCP server tool handlers.
+
+These tests exercise the tool functions directly (not via MCP transport),
+using the same tmp_config fixture as the rest of the test suite.
+"""
+
+from __future__ import annotations
+
+import os
+from datetime import date
+from pathlib import Path
+from unittest.mock import patch
+
+import pytest
+import yaml
+
+from meta_learning.shared.models import (
+    ErrorTaxonomy,
+    TaxonomyEntry,
+)
+
+
+@pytest.fixture(autouse=True)
+def _reset_mcp_globals():
+    """Reset module-level singletons between tests."""
+    import meta_learning.mcp_server as mod
+
+    mod._config = None
+    mod._qt_index = None
+    mod._taxonomy_mtime = 0.0
+    yield
+    mod._config = None
+    mod._qt_index = None
+    mod._taxonomy_mtime = 0.0
+
+
+@pytest.fixture
+def workspace(tmp_path: Path) -> Path:
+    ws = tmp_path / "workspace"
+    ws.mkdir()
+    (ws / "signal_buffer").mkdir()
+    (ws / "experience_pool").mkdir()
+    return ws
+
+
+@pytest.fixture
+def _env(workspace: Path):
+    """Set env vars so the MCP server picks up the temp workspace."""
+    with patch.dict(os.environ, {
+        "META_LEARNING_WORKSPACE": str(workspace),
+        "META_LEARNING_CONFIG": "",
+    }):
+        yield
+
+
+def _write_taxonomy(workspace: Path, taxonomy: ErrorTaxonomy) -> None:
+    tax_path = workspace / "error_taxonomy.yaml"
+    data: dict = {"taxonomy": {}}
+    for domain, subdomains in taxonomy.taxonomy.items():
+        data["taxonomy"][domain] = {}
+        for subdomain, entries in subdomains.items():
+            data["taxonomy"][domain][subdomain] = [
+                e.model_dump(mode="json") for e in entries
+            ]
+    tax_path.write_text(yaml.dump(data, allow_unicode=True), encoding="utf-8")
+
+
+def _sample_taxonomy() -> ErrorTaxonomy:
+    entry = TaxonomyEntry(
+        id="tax-cod-001",
+        name="Generic Type Error",
+        trigger="Nested generics",
+        fix_sop="Add explicit type params",
+        prevention="Always annotate generics",
+        confidence=0.9,
+        source_exps=["exp-001"],
+        keywords=["TS2345", "generic"],
+        created_at=date.today(),
+        last_verified=date.today(),
+    )
+    tax = ErrorTaxonomy()
+    tax.add_entry("coding", "typescript", entry)
+    return tax
+
+
+# -----------------------------------------------------------------------
+# quick_think
+# -----------------------------------------------------------------------
+
+
+class TestQuickThink:
+    @pytest.mark.usefixtures("_env")
+    def test_no_risk(self):
+        from meta_learning.mcp_server import quick_think
+
+        result = quick_think("rename a variable")
+        assert result == "no risk detected"
+
+    @pytest.mark.usefixtures("_env")
+    def test_irreversible_detected(self):
+        from meta_learning.mcp_server import quick_think
+
+        result = quick_think("rm -rf /tmp/old_data")
+        assert "irreversible" in result.lower()
+        assert "high" in result
+
+    @pytest.mark.usefixtures("_env")
+    def test_taxonomy_keyword_hit(self, workspace: Path):
+        _write_taxonomy(workspace, _sample_taxonomy())
+        from meta_learning.mcp_server import quick_think
+
+        result = quick_think("fix TS2345 generic error")
+        assert "tax-cod-001" in result
+        assert "Generic Type Error" in result
+
+    @pytest.mark.usefixtures("_env")
+    def test_tools_used(self):
+        from meta_learning.mcp_server import quick_think
+
+        result = quick_think("push changes", tools_used=["git push --force"])
+        assert "irreversible" in result.lower()
+
+
+# -----------------------------------------------------------------------
+# capture_signal
+# -----------------------------------------------------------------------
+
+
+class TestCaptureSignal:
+    @pytest.mark.usefixtures("_env")
+    def test_no_signal_for_clean_task(self):
+        from meta_learning.mcp_server import capture_signal
+
+        result = capture_signal(task_description="read a file")
+        assert "no signal captured" in result
+
+    @pytest.mark.usefixtures("_env")
+    def test_captures_error_recovery(self, workspace: Path):
+        from meta_learning.mcp_server import capture_signal
+
+        result = capture_signal(
+            task_description="Fix TypeScript build error",
+            errors_encountered=["TS2345: type mismatch"],
+            errors_fixed=True,
+            step_count=5,
+        )
+        assert "Signal captured" in result
+        assert "error_recovery" in result
+
+        sig_files = list((workspace / "signal_buffer").glob("sig-*.yaml"))
+        assert len(sig_files) == 1
+
+    @pytest.mark.usefixtures("_env")
+    def test_captures_user_correction(self, workspace: Path):
+        from meta_learning.mcp_server import capture_signal
+
+        result = capture_signal(
+            task_description="Implement feature",
+            user_corrections=["不对，应该用另一种方式"],
+        )
+        assert "Signal captured" in result
+        assert "user_correction" in result
+
+    @pytest.mark.usefixtures("_env")
+    def test_captures_efficiency_anomaly(self, workspace: Path):
+        from meta_learning.mcp_server import capture_signal
+
+        result = capture_signal(
+            task_description="Complex refactoring",
+            step_count=30,
+        )
+        assert "Signal captured" in result
+        assert "efficiency_anomaly" in result
+
+    @pytest.mark.usefixtures("_env")
+    def test_captures_new_tool(self, workspace: Path):
+        from meta_learning.mcp_server import capture_signal
+
+        result = capture_signal(
+            task_description="Deploy with Docker",
+            new_tools=["docker_exec"],
+        )
+        assert "Signal captured" in result
+        assert "new_tool" in result
+
+
+# -----------------------------------------------------------------------
+# status
+# -----------------------------------------------------------------------
+
+
+class TestStatus:
+    @pytest.mark.usefixtures("_env")
+    def test_empty_workspace(self, workspace: Path):
+        from meta_learning.mcp_server import status
+
+        result = status()
+        assert "Pending signals: 0" in result
+        assert "Total experiences: 0" in result
+        assert "Taxonomy entries: 0" in result
+        assert str(workspace) in result
+
+
+# -----------------------------------------------------------------------
+# run_layer2
+# -----------------------------------------------------------------------
+
+
+class TestRunLayer2:
+    @pytest.mark.usefixtures("_env")
+    @pytest.mark.asyncio
+    async def test_no_trigger(self):
+        from meta_learning.mcp_server import run_layer2
+
+        result = await run_layer2()
+        assert "trigger conditions not met" in result
+
+    @pytest.mark.usefixtures("_env")
+    @pytest.mark.asyncio
+    async def test_force_run(self):
+        from meta_learning.mcp_server import run_layer2
+
+        result = await run_layer2(force=True)
+        assert "Layer 2 complete" in result
+
+
+# -----------------------------------------------------------------------
+# run_layer3
+# -----------------------------------------------------------------------
+
+
+class TestRunLayer3:
+    @pytest.mark.usefixtures("_env")
+    @pytest.mark.asyncio
+    async def test_runs(self):
+        from meta_learning.mcp_server import run_layer3
+
+        result = await run_layer3()
+        assert "Layer 3 complete" in result
+
+
+# -----------------------------------------------------------------------
+# resources
+# -----------------------------------------------------------------------
+
+
+class TestResources:
+    @pytest.mark.usefixtures("_env")
+    def test_taxonomy_empty(self):
+        from meta_learning.mcp_server import get_taxonomy
+
+        assert get_taxonomy() == ""
+
+    @pytest.mark.usefixtures("_env")
+    def test_taxonomy_with_data(self, workspace: Path):
+        _write_taxonomy(workspace, _sample_taxonomy())
+        from meta_learning.mcp_server import get_taxonomy
+
+        result = get_taxonomy()
+        assert "tax-cod-001" in result
+        assert "TS2345" in result
+
+    @pytest.mark.usefixtures("_env")
+    def test_config_resource(self):
+        from meta_learning.mcp_server import get_config_resource
+
+        result = get_config_resource()
+        assert "workspace_root" in result
+        assert "signal_buffer_dir" in result
+
+
+# -----------------------------------------------------------------------
+# risk_assessment prompt
+# -----------------------------------------------------------------------
+
+
+class TestRiskAssessmentPrompt:
+    @pytest.mark.usefixtures("_env")
+    def test_safe_task(self):
+        from meta_learning.mcp_server import risk_assessment
+
+        result = risk_assessment("read a config file")
+        assert "No known risk patterns" in result
+
+    @pytest.mark.usefixtures("_env")
+    def test_risky_task(self):
+        from meta_learning.mcp_server import risk_assessment
+
+        result = risk_assessment("rm -rf /data")
+        assert "irreversible" in result.lower()
+        assert "rollback" in result.lower()

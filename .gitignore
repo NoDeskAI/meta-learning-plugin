@@ -15,3 +15,7 @@ error_taxonomy.yaml
 growth-plan.yaml
 mock_data/
 temp_test_*/
+.cursor/*
+!.cursor/mcp.json
+!.cursor/rules/
+!.cursor/plans/
