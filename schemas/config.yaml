@@ -6,11 +6,11 @@ meta_learning:
   properties:
     workspace_root:
       type: string
-      description: "Path to OpenClaw workspace root (e.g. ~/.openclaw/workspace)"
+      description: "Path to OpenClaw workspace root. Override via OPENCLAW_WORKSPACE_ROOT env var."
       default: "~/.openclaw/workspace"
     sessions_root:
       type: string
-      description: "Path to session JSONL files (e.g. ~/.openclaw/agents/main/sessions)"
+      description: "Path to session JSONL files. Override via OPENCLAW_SESSIONS_DIR env var."
       default: "~/.openclaw/agents/main/sessions"
 
     signal_buffer_dir:

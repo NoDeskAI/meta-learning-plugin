@@ -1,12 +1,16 @@
 from __future__ import annotations
 
+import logging
+from collections import deque
 from datetime import datetime
-from itertools import combinations
+from pathlib import Path
+from typing import Callable
 
 from meta_learning.shared.io import (
     list_all_experiences,
     load_experience_index,
     next_cluster_id,
+    read_signal,
     save_experience_index,
     write_experience,
 )
@@ -18,6 +22,124 @@ from meta_learning.shared.models import (
     MetaLearningConfig,
     TaskType,
 )
+
+logger = logging.getLogger(__name__)
+
+EmbeddingFn = Callable[[str], list[float]]
+_get_embedding: EmbeddingFn | None = None
+
+
+def set_embedding_fn(fn: EmbeddingFn | None) -> None:
+    global _get_embedding  # noqa: PLW0603
+    _get_embedding = fn
+
+
+_STRIP_CHARS = ".:,;()[]{}\"'`<>!?/\\#@$%^&*+=~|"
+
+_SIMILARITY_STOPWORDS = frozenset(
+    {
+        "the",
+        "a",
+        "an",
+        "is",
+        "of",
+        "to",
+        "in",
+        "for",
+        "and",
+        "or",
+        "not",
+        "it",
+        "this",
+        "that",
+        "with",
+        "from",
+        "are",
+        "was",
+        "were",
+        "been",
+        "be",
+        "has",
+        "have",
+        "had",
+        "but",
+        "if",
+        "its",
+        "can",
+        "does",
+        "do",
+        "did",
+        "will",
+        "would",
+        "should",
+        "could",
+        "may",
+        "might",
+        "on",
+        "no",
+        "error",
+        "type",
+        "cannot",
+        "read",
+        "properties",
+        "undefined",
+        "null",
+        "variable",
+        "function",
+        "argument",
+        "parameter",
+        "value",
+        "missing",
+        "expected",
+        "return",
+        "module",
+        "name",
+        "call",
+    }
+)
+
+
+def _tokenize(text: str) -> set[str]:
+    tokens: set[str] = set()
+    for raw in text.lower().split():
+        cleaned = raw.strip(_STRIP_CHARS)
+        if cleaned and len(cleaned) > 1 and cleaned not in _SIMILARITY_STOPWORDS:
+            tokens.add(cleaned)
+    return tokens
+
+
+def _experience_text(exp: Experience) -> str:
+    parts = [exp.scene, exp.root_cause, exp.resolution]
+    if exp.failure_signature:
+        parts.append(exp.failure_signature)
+    return " ".join(parts)
+
+
+def _cosine_similarity(vec_a: list[float], vec_b: list[float]) -> float:
+    dot = sum(a * b for a, b in zip(vec_a, vec_b))
+    norm_a = sum(a * a for a in vec_a) ** 0.5
+    norm_b = sum(b * b for b in vec_b) ** 0.5
+    if norm_a == 0 or norm_b == 0:
+        return 0.0
+    return dot / (norm_a * norm_b)
+
+
+def _keyword_similarity(exp_a: Experience, exp_b: Experience) -> float:
+    """Jaccard-like overlap on meaningful tokens.  O(len(text)) per pair."""
+    words_a = _tokenize(_experience_text(exp_a))
+    words_b = _tokenize(_experience_text(exp_b))
+    if not words_a or not words_b:
+        return 0.0
+    overlap = words_a & words_b
+    return len(overlap) / min(len(words_a), len(words_b))
+
+
+def _compute_similarity(exp_a: Experience, exp_b: Experience) -> float:
+    if _get_embedding is not None:
+        vec_a = _get_embedding(_experience_text(exp_a))
+        vec_b = _get_embedding(_experience_text(exp_b))
+        return _cosine_similarity(vec_a, vec_b)
+    return _keyword_similarity(exp_a, exp_b)
 
 
 class Consolidator:
@@ -81,15 +203,49 @@ class Consolidator:
         if len(experiences) < 2:
             return []
 
+        consolidate_cfg = self._config.layer2.consolidate
+        similarity_threshold = consolidate_cfg.similarity_threshold
+        use_llm = consolidate_cfg.use_llm_clustering
+        max_llm_calls = consolidate_cfg.max_llm_calls_per_group
+
         adjacency: dict[str, set[str]] = {e.id: set() for e in experiences}
         exp_map = {e.id: e for e in experiences}
 
-        for exp_a, exp_b in combinations(experiences, 2):
-            judgment = await self._llm.judge_same_class(exp_a, exp_b)
-            if judgment.same_class:
-                adjacency[exp_a.id].add(exp_b.id)
-                adjacency[exp_b.id].add(exp_a.id)
+        # Phase 1 — lightweight pre-filter: O(N^2) text similarity (cheap)
+        # splits pairs into auto-merge (high sim) vs LLM-candidates (moderate sim)
+        candidate_pairs: list[tuple[Experience, Experience]] = []
+        auto_merge_pairs: list[tuple[str, str]] = []
 
+        for i, exp_a in enumerate(experiences):
+            for exp_b in experiences[i + 1 :]:
+                sim = _compute_similarity(exp_a, exp_b)
+                if sim >= 0.7:
+                    auto_merge_pairs.append((exp_a.id, exp_b.id))
+                elif sim >= similarity_threshold:
+                    candidate_pairs.append((exp_a, exp_b))
+
+        for id_a, id_b in auto_merge_pairs:
+            adjacency[id_a].add(id_b)
+            adjacency[id_b].add(id_a)
+
+        # Phase 2 — LLM confirmation on ambiguous pairs (capped at max_llm_calls)
+        if use_llm and candidate_pairs:
+            llm_calls = 0
+            for exp_a, exp_b in candidate_pairs:
+                if llm_calls >= max_llm_calls:
+                    logger.info(
+                        "LLM call cap reached (%d); skipping remaining %d candidate pairs",
+                        max_llm_calls,
+                        len(candidate_pairs) - llm_calls,
+                    )
+                    break
+                judgment = await self._llm.judge_same_class(exp_a, exp_b)
+                llm_calls += 1
+                if judgment.same_class:
+                    adjacency[exp_a.id].add(exp_b.id)
+                    adjacency[exp_b.id].add(exp_a.id)
+
+        # Phase 3 — BFS connected-component discovery
         clusters: list[ExperienceCluster] = []
         visited: set[str] = set()
 
@@ -142,9 +298,9 @@ def _already_clustered_ids(index: ExperienceIndex) -> set[str]:
 
 def _bfs_component(start: str, adjacency: dict[str, set[str]]) -> set[str]:
     visited: set[str] = set()
-    queue = [start]
+    queue: deque[str] = deque([start])
     while queue:
-        node = queue.pop(0)
+        node = queue.popleft()
         if node in visited:
             continue
         visited.add(node)
@@ -152,3 +308,41 @@ def _bfs_component(start: str, adjacency: dict[str, set[str]]) -> set[str]:
             if neighbor not in visited:
                 queue.append(neighbor)
     return visited
+
+
+def _resolve_experience_image_paths(
+    experiences: list[Experience],
+    config: MetaLearningConfig,
+) -> dict[str, list[str]]:
+    text_to_images: dict[str, list[str]] = {}
+    signal_dir = Path(config.signal_buffer_path)
+    if not signal_dir.exists():
+        return text_to_images
+
+    for exp in experiences:
+        sig_path = signal_dir / f"{exp.source_signal}.yaml"
+        if not sig_path.exists():
+            continue
+        try:
+            signal = read_signal(sig_path)
+        except Exception:
+            continue
+        if not signal.image_snapshots:
+            continue
+        text_key = _experience_text(exp)
+        text_to_images[text_key] = signal.image_snapshots
+
+    return text_to_images
+
+
+def bootstrap_multimodal_embedding(config: MetaLearningConfig) -> None:
+    if not config.dashscope.enabled:
+        return
+
+    from meta_learning.shared.embedding_dashscope import MultimodalEmbedding
+
+    all_exps = list_all_experiences(config)
+    image_lookup = _resolve_experience_image_paths(all_exps, config)
+
+    embedding = MultimodalEmbedding(config.dashscope)
+    set_embedding_fn(embedding.make_embedding_fn(image_lookup))

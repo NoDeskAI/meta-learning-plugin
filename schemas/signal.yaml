@@ -48,6 +48,12 @@ signal:
     user_feedback:
       type: string
       nullable: true
+    image_snapshots:
+      type: array
+      items:
+        type: string
+      default: []
+      description: "File paths to image snapshots captured during the session (multimodal support)"
     step_count:
       type: integer
       minimum: 1
@@ -55,3 +61,15 @@ signal:
       type: boolean
       default: false
       description: "Set to true after Layer 2 materialization"
+    experiment_id:
+      type: string
+      nullable: true
+      description: "A/B experiment identifier, populated from config when experiment is enabled"
+    experiment_group:
+      type: string
+      nullable: true
+      enum:
+        - A
+        - B
+        - control
+      description: "Experiment group assignment (A, B, or control)"

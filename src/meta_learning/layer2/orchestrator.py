@@ -43,7 +43,15 @@ class Layer2Orchestrator:
         return False
 
     async def run_pipeline(self) -> Layer2Result:
-        logger.info("Layer 2 pipeline starting")
+        exp_cfg = self._config.experiment
+        if exp_cfg.enabled:
+            logger.info(
+                "Layer 2 pipeline starting (experiment=%s, group=%s)",
+                exp_cfg.experiment_id,
+                exp_cfg.group.value,
+            )
+        else:
+            logger.info("Layer 2 pipeline starting")
 
         logger.info("Step 0: Materializing signals")
         new_experiences = await self._materializer.materialize_all_pending()
@@ -76,6 +84,8 @@ class Layer2Orchestrator:
             new_taxonomy_entries=len(new_taxonomy_entries),
             skill_updates=len([r for r in skill_results if r.action.value != "none"]),
             timestamp=datetime.now(),
+            experiment_id=exp_cfg.experiment_id if exp_cfg.enabled else None,
+            experiment_group=exp_cfg.group.value if exp_cfg.enabled else None,
         )
         logger.info("Layer 2 pipeline complete: %s", result)
         return result
@@ -109,17 +119,26 @@ class Layer2Result:
         new_taxonomy_entries: int,
         skill_updates: int,
         timestamp: datetime,
+        experiment_id: str | None = None,
+        experiment_group: str | None = None,
     ) -> None:
         self.materialized_count = materialized_count
         self.total_clusters = total_clusters
         self.new_taxonomy_entries = new_taxonomy_entries
         self.skill_updates = skill_updates
         self.timestamp = timestamp
+        self.experiment_id = experiment_id
+        self.experiment_group = experiment_group
 
     def __repr__(self) -> str:
-        return (
+        base = (
             f"Layer2Result(materialized={self.materialized_count}, "
             f"clusters={self.total_clusters}, "
             f"taxonomy={self.new_taxonomy_entries}, "
             f"skills={self.skill_updates})"
         )
+        if self.experiment_id:
+            return (
+                f"{base[:-1]}, exp={self.experiment_id}, group={self.experiment_group})"
+            )
+        return base

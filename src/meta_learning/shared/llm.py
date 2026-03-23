@@ -382,9 +382,11 @@ _KEYWORD_STOPWORDS = frozenset(
 )
 
 
+_CLEAN_TOKEN_CHARS = ".:,;()[]{}\"'`<>!?/\\#@$%^&*+=~|"
+
+
 def _clean_token(token: str) -> str:
-    """Strip surrounding punctuation, quotes, parens from a token."""
-    return token.strip(".:,;()[]{}\"'`<>!?/\\#@$%^&*+=~|")
+    return token.strip(_CLEAN_TOKEN_CHARS)
 
 
 def _extract_common_keywords(experiences: list[Experience]) -> list[str]:

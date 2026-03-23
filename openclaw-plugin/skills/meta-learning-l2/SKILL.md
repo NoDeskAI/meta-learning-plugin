@@ -30,9 +30,11 @@ ls signal_buffer/sig-*.yaml 2>/dev/null | wc -l
 ## 运行 Layer 2
 
 ```bash
-cd ~/Documents/Projects/lingmin-meta-learning
+cd "$META_LEARNING_PROJECT_DIR"
 source .env.paths 2>/dev/null
-venv/bin/python3 -m meta_learning run-layer2 --workspace ~/.openclaw/workspace
+PYTHON_BIN="${VIRTUAL_ENV:-venv}/bin/python3"
+[ "$(uname)" != "Linux" ] && [ "$(uname)" != "Darwin" ] && PYTHON_BIN="${VIRTUAL_ENV:-venv}/Scripts/python.exe"
+$PYTHON_BIN -m meta_learning run-layer2 --workspace "${OPENCLAW_WORKSPACE_ROOT:-~/.openclaw/workspace}"
 ```
 
 ## 运行 Layer 3（可选，低频）
@@ -40,9 +42,11 @@ venv/bin/python3 -m meta_learning run-layer2 --workspace ~/.openclaw/workspace
 仅在 experience_pool 中有足够经验（>= 10 条）时运行：
 
 ```bash
-cd ~/Documents/Projects/lingmin-meta-learning
+cd "$META_LEARNING_PROJECT_DIR"
 source .env.paths 2>/dev/null
-venv/bin/python3 -m meta_learning run-layer3 --workspace ~/.openclaw/workspace
+PYTHON_BIN="${VIRTUAL_ENV:-venv}/bin/python3"
+[ "$(uname)" != "Linux" ] && [ "$(uname)" != "Darwin" ] && PYTHON_BIN="${VIRTUAL_ENV:-venv}/Scripts/python.exe"
+$PYTHON_BIN -m meta_learning run-layer3 --workspace "${OPENCLAW_WORKSPACE_ROOT:-~/.openclaw/workspace}"
 ```
 
 ## 产出

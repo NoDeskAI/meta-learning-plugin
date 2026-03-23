@@ -58,6 +58,18 @@ class SignalCapture:
         if context.user_corrections:
             user_feedback = context.user_corrections[0][:500]
 
+        exp_cfg = self._config.experiment
+        experiment_id: str | None = None
+        experiment_group: str | None = None
+        if exp_cfg.enabled and exp_cfg.experiment_id:
+            experiment_id = exp_cfg.experiment_id
+            experiment_group = exp_cfg.group.value
+
+        raw_snapshots = context.extra.get("image_snapshots", [])
+        image_snapshots: list[str] = (
+            [str(p) for p in raw_snapshots] if isinstance(raw_snapshots, list) else []
+        )
+
         return Signal(
             signal_id=sig_id,
             timestamp=datetime.now(),
@@ -69,7 +81,10 @@ class SignalCapture:
             error_snapshot=error_snapshot,
             resolution_snapshot=resolution_snapshot,
             user_feedback=user_feedback,
+            image_snapshots=image_snapshots,
             step_count=context.step_count,
+            experiment_id=experiment_id,
+            experiment_group=experiment_group,
         )
 
 
