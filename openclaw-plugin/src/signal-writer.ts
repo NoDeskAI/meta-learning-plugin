@@ -1,5 +1,6 @@
-import { writeFileSync, mkdirSync, readdirSync, existsSync } from "node:fs";
+import { writeFileSync, mkdirSync, renameSync } from "node:fs";
 import { resolve } from "node:path";
+import { randomUUID } from "node:crypto";
 import { dump as yamlDump } from "js-yaml";
 
 export type TriggerReason = "error_recovery" | "user_correction" | "new_tool" | "efficiency_anomaly";
@@ -15,8 +16,11 @@ export type SignalData = {
   error_snapshot: string | null;
   resolution_snapshot: string | null;
   user_feedback: string | null;
+  image_snapshots: string[];
   step_count: number;
   processed: boolean;
+  experiment_id: string | null;
+  experiment_group: string | null;
 };
 
 type MessageObj = {
@@ -27,6 +31,8 @@ type MessageObj = {
 export function analyzeMessagesForSignal(
   messages: unknown[],
   sessionId: string | undefined,
+  experimentId?: string | null,
+  experimentGroup?: string | null,
 ): SignalData | null {
   const analysis = extractConversationSignals(messages);
 
@@ -66,8 +72,11 @@ export function analyzeMessagesForSignal(
     error_snapshot: errorSnapshot,
     resolution_snapshot: null,
     user_feedback: userFeedback,
+    image_snapshots: [],
     step_count: analysis.toolCount,
     processed: false,
+    experiment_id: experimentId ?? null,
+    experiment_group: experimentGroup ?? null,
   };
 }
 
@@ -219,30 +228,21 @@ function extractKeywords(analysis: ConversationAnalysis): string[] {
 }
 
 function generateSignalId(): string {
-  const now = new Date();
-  const dateStr = now.toISOString().split("T")[0].replace(/-/g, "");
-  const rand = String(Math.floor(Math.random() * 999) + 1).padStart(3, "0");
-  return `sig-${dateStr}-${rand}`;
+  const dateStr = new Date().toISOString().split("T")[0].replace(/-/g, "");
+  return `sig-${dateStr}-${randomUUID()}`;
 }
 
 export function writeSignal(workspaceRoot: string, signalBufferDir: string, signal: SignalData): string {
   const bufDir = resolve(workspaceRoot, signalBufferDir);
   mkdirSync(bufDir, { recursive: true });
 
-  const dedupedId = deduplicateSignalId(bufDir, signal.signal_id);
-  signal.signal_id = dedupedId;
+  const signalId = signal.signal_id;
+  const filePath = resolve(bufDir, `${signalId}.yaml`);
+  const tmpPath = `${filePath}.${randomUUID()}.tmp`;
 
-  const filePath = resolve(bufDir, `${dedupedId}.yaml`);
-  writeFileSync(filePath, yamlDump(signal, { lineWidth: -1 }), "utf-8");
+  writeFileSync(tmpPath, yamlDump(signal, { lineWidth: -1 }), "utf-8");
+  renameSync(tmpPath, filePath);
+
   return filePath;
 }
 
-function deduplicateSignalId(bufDir: string, signalId: string): string {
-  if (!existsSync(bufDir)) return signalId;
-  const existing = readdirSync(bufDir).filter((f) => f.startsWith(signalId.slice(0, 12)));
-  if (existing.length === 0) return signalId;
-
-  const dateStr = signalId.split("-")[1];
-  const nextNum = String(existing.length + 1).padStart(3, "0");
-  return `sig-${dateStr}-${nextNum}`;
-}

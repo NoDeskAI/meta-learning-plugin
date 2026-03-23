@@ -9,9 +9,22 @@
  */
 
 import type { OpenClawPluginApi } from "openclaw/plugin-sdk";
+import { platform, homedir } from "node:os";
+import { resolve } from "node:path";
 import { loadTaxonomy } from "./src/taxonomy-loader.js";
 import { quickThinkEvaluate, formatRiskWarning } from "./src/quick-think.js";
 import { analyzeMessagesForSignal, writeSignal } from "./src/signal-writer.js";
+
+export function expandTilde(p: string): string {
+  if (p === "~" || p.startsWith("~/") || p.startsWith("~\\")) {
+    return resolve(homedir(), p.slice(2));
+  }
+  return p;
+}
+
+function defaultPythonBin(): string {
+  return platform() === "win32" ? "venv/Scripts/python.exe" : "venv/bin/python3";
+}
 
 type MetaLearningConfig = {
   workspaceRoot?: string;
@@ -19,12 +32,14 @@ type MetaLearningConfig = {
   taxonomyPath?: string;
   pythonBin?: string;
   enabled?: boolean;
+  experimentId?: string;
+  experimentGroup?: string;
 };
 
 const DEFAULTS = {
   signalBufferDir: "signal_buffer",
   taxonomyPath: "error_taxonomy.yaml",
-  pythonBin: "venv/bin/python3",
+  pythonBin: defaultPythonBin(),
 };
 
 const plugin = {
@@ -41,9 +56,12 @@ const plugin = {
 
     const signalBufferDir = cfg.signalBufferDir ?? DEFAULTS.signalBufferDir;
     const taxonomyPath = cfg.taxonomyPath ?? DEFAULTS.taxonomyPath;
+    const experimentId = cfg.experimentId ?? null;
+    const experimentGroup = cfg.experimentGroup ?? null;
 
     const resolveWorkspace = (): string => {
-      return cfg.workspaceRoot ?? api.resolvePath(".");
+      const raw = cfg.workspaceRoot ?? api.resolvePath(".");
+      return expandTilde(raw);
     };
 
     // ========================================================================
@@ -81,12 +99,18 @@ const plugin = {
       const workspaceRoot = resolveWorkspace();
 
       try {
-        const signal = analyzeMessagesForSignal(event.messages, ctx.sessionId);
+        const signal = analyzeMessagesForSignal(
+          event.messages,
+          ctx.sessionId,
+          experimentId,
+          experimentGroup,
+        );
         if (!signal) return;
 
         const filePath = writeSignal(workspaceRoot, signalBufferDir, signal);
         api.logger.info?.(
-          `meta-learning: Signal captured [${signal.trigger_reason}] → ${filePath}`,
+          `meta-learning: Signal captured [${signal.trigger_reason}] → ${filePath}` +
+            (experimentId ? ` (exp=${experimentId}, group=${experimentGroup})` : ""),
         );
       } catch (err) {
         api.logger.warn(`meta-learning: Signal capture error: ${String(err)}`);

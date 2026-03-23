@@ -1,10 +1,15 @@
 from __future__ import annotations
 
+import os
 from datetime import date, datetime
 from enum import StrEnum
 from typing import Any
 
 from pydantic import BaseModel, Field
+
+
+def _env_or(env_key: str, default: str) -> str:
+    return os.environ.get(env_key, default)
 
 
 class TriggerReason(StrEnum):
@@ -23,6 +28,18 @@ class TaskType(StrEnum):
     UNCLASSIFIED = "_unclassified"
 
 
+class ExperimentGroup(StrEnum):
+    A = "A"
+    B = "B"
+    CONTROL = "control"
+
+
+class ExperimentConfig(BaseModel):
+    experiment_id: str = ""
+    group: ExperimentGroup = ExperimentGroup.CONTROL
+    enabled: bool = False
+
+
 class Signal(BaseModel):
     signal_id: str
     timestamp: datetime
@@ -34,8 +51,11 @@ class Signal(BaseModel):
     error_snapshot: str | None = None
     resolution_snapshot: str | None = None
     user_feedback: str | None = None
+    image_snapshots: list[str] = Field(default_factory=list)
     step_count: int
     processed: bool = False
+    experiment_id: str | None = None
+    experiment_group: str | None = None
 
 
 class Experience(BaseModel):
@@ -143,6 +163,10 @@ class MaterializeConfig(BaseModel):
 
 class ConsolidateConfig(BaseModel):
     min_cluster_size_for_taxonomy: int = 3
+    use_llm_clustering: bool = True
+    max_llm_calls_per_group: int = 50
+    similarity_threshold: float = 0.3
+    batch_size: int = 10
 
 
 class TaxonomyConfig(BaseModel):
@@ -164,6 +188,29 @@ class ConfidenceConfig(BaseModel):
     promote_threshold: float = 0.8
     decay_enabled: bool = True
     decay_base: float = 0.95
+
+
+class DashScopeConfig(BaseModel):
+    """Configuration for DashScope multimodal embedding (qwen3-vl-embedding).
+
+    The API key is read from the ``DASHSCOPE_API_KEY`` environment variable by
+    default.  A hard-coded fallback is provided **only** for local development;
+    rotate / revoke it before deploying to production.
+    """
+
+    api_key: str = Field(
+        default_factory=lambda: _env_or(
+            "DASHSCOPE_API_KEY",
+            "sk-dcae1026f5f34f748183bd66fcaaae89",  # dev-only fallback — rotate before prod
+        )
+    )
+    base_url: str = (
+        "https://dashscope.aliyuncs.com/api/v1"
+        "/services/embeddings/multimodal-embedding/multimodal-embedding"
+    )
+    model: str = "qwen3-vl-embedding"
+    dimension: int = 1024
+    enabled: bool = True
 
 
 class LLMConfig(BaseModel):
@@ -316,8 +363,16 @@ class Layer3Config(BaseModel):
 
 
 class MetaLearningConfig(BaseModel):
-    workspace_root: str = "~/.openclaw/workspace"
-    sessions_root: str = "~/.openclaw/agents/main/sessions"
+    workspace_root: str = Field(
+        default_factory=lambda: _env_or(
+            "OPENCLAW_WORKSPACE_ROOT", "~/.openclaw/workspace"
+        )
+    )
+    sessions_root: str = Field(
+        default_factory=lambda: _env_or(
+            "OPENCLAW_SESSIONS_DIR", "~/.openclaw/agents/main/sessions"
+        )
+    )
     signal_buffer_dir: str = "signal_buffer"
     experience_pool_dir: str = "experience_pool"
     error_taxonomy_path: str = "error_taxonomy.yaml"
@@ -327,6 +382,8 @@ class MetaLearningConfig(BaseModel):
     layer3: Layer3Config = Field(default_factory=Layer3Config)
     confidence: ConfidenceConfig = Field(default_factory=ConfidenceConfig)
     llm: LLMConfig = Field(default_factory=LLMConfig)
+    dashscope: DashScopeConfig = Field(default_factory=DashScopeConfig)
+    experiment: ExperimentConfig = Field(default_factory=ExperimentConfig)
 
     def resolve_workspace_path(self, relative: str) -> str:
         from pathlib import Path
