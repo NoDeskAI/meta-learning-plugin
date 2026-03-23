@@ -16,6 +16,7 @@ from mcp.server.fastmcp import FastMCP
 
 from meta_learning.layer1.quick_think import QuickThinkIndex
 from meta_learning.layer1.signal_capture import SignalCapture
+from meta_learning.layer2.consolidate import bootstrap_multimodal_embedding
 from meta_learning.shared.io import (
     list_all_experiences,
     list_pending_signals,
@@ -202,6 +203,8 @@ def capture_signal(
     user_corrections: list[str] | None = None,
     tools_used: list[str] | None = None,
     new_tools: list[str] | None = None,
+    resolution_snapshot: str | None = None,
+    image_snapshots: list[str] | None = None,
     step_count: int = 0,
 ) -> str:
     """Record a learning signal after completing a task.
@@ -224,6 +227,8 @@ def capture_signal(
         user_corrections: User feedback that corrected your approach.
         tools_used: All tools invoked during the task.
         new_tools: Tools used for the first time.
+        resolution_snapshot: Short summary of how the issue was resolved.
+        image_snapshots: Paths to screenshots captured during this task.
         step_count: Total number of tool calls / steps taken.
     """
     config = _get_config()
@@ -238,6 +243,10 @@ def capture_signal(
         tools_used=tools_used or [],
         new_tools=new_tools or [],
         step_count=step_count,
+        extra={
+            "resolution": resolution_snapshot,
+            "image_snapshots": image_snapshots or [],
+        },
     )
 
     signal = capture.evaluate_and_capture(context)
@@ -269,6 +278,7 @@ async def run_layer2(force: bool = False) -> str:
         force: Run even if trigger conditions are not met.
     """
     config = _get_config()
+    bootstrap_multimodal_embedding(config)
     llm = _create_llm(config)
 
     from meta_learning.layer2.orchestrator import Layer2Orchestrator

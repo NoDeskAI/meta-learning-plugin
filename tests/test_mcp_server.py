@@ -183,6 +183,29 @@ class TestCaptureSignal:
         assert "Signal captured" in result
         assert "new_tool" in result
 
+    @pytest.mark.usefixtures("_env")
+    def test_captures_resolution_and_images(self, workspace: Path):
+        from meta_learning.mcp_server import capture_signal
+
+        result = capture_signal(
+            task_description="Fix flaky E2E test",
+            errors_encountered=["Timeout waiting for selector"],
+            errors_fixed=True,
+            resolution_snapshot="added explicit wait and retry",
+            image_snapshots=["screenshots/before.png", "screenshots/after.png"],
+            step_count=8,
+        )
+        assert "Signal captured" in result
+
+        sig_files = sorted((workspace / "signal_buffer").glob("sig-*.yaml"))
+        assert len(sig_files) == 1
+        signal_data = yaml.safe_load(sig_files[0].read_text(encoding="utf-8"))
+        assert signal_data["resolution_snapshot"] == "added explicit wait and retry"
+        assert signal_data["image_snapshots"] == [
+            "screenshots/before.png",
+            "screenshots/after.png",
+        ]
+
 
 # -----------------------------------------------------------------------
 # status
@@ -222,6 +245,17 @@ class TestRunLayer2:
 
         result = await run_layer2(force=True)
         assert "Layer 2 complete" in result
+
+    @pytest.mark.usefixtures("_env")
+    @pytest.mark.asyncio
+    async def test_bootstrap_multimodal_embedding_called(self):
+        from meta_learning.mcp_server import run_layer2
+
+        with patch(
+            "meta_learning.mcp_server.bootstrap_multimodal_embedding"
+        ) as mock_bootstrap:
+            await run_layer2(force=True)
+            mock_bootstrap.assert_called_once()
 
 
 # -----------------------------------------------------------------------
