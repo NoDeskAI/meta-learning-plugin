@@ -1,5 +1,6 @@
 from __future__ import annotations
 
+import logging
 from datetime import date
 
 from meta_learning.shared.io import (
@@ -18,6 +19,8 @@ from meta_learning.shared.models import (
     MetaLearningConfig,
     TaxonomyEntry,
 )
+
+logger = logging.getLogger(__name__)
 
 
 class TaxonomyBuilder:
@@ -39,11 +42,18 @@ class TaxonomyBuilder:
             if not experiences:
                 continue
 
+            old_tax_id = cluster.promoted_to_taxonomy
+            if old_tax_id:
+                logger.info("Refreshing stale taxonomy entry %s", old_tax_id)
+                taxonomy.remove_entry(old_tax_id)
+
             extraction = await self._llm.extract_taxonomy(experiences)
 
             domain = cluster.task_type.value
             subdomain = _infer_subdomain(experiences)
-            entry_id = next_taxonomy_id(taxonomy, _make_prefix(domain, subdomain))
+            entry_id = old_tax_id or next_taxonomy_id(
+                taxonomy, _make_prefix(domain, subdomain)
+            )
 
             entry = TaxonomyEntry(
                 id=entry_id,

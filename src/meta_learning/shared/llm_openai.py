@@ -9,6 +9,8 @@ from __future__ import annotations
 import json
 import logging
 import os
+from datetime import datetime, timezone
+from pathlib import Path
 from typing import Any
 
 import httpx
@@ -47,8 +49,21 @@ class OpenAILLM(LLMInterface):
         self._temperature = config.llm.temperature
         self._max_tokens = config.llm.max_tokens
 
+    def _append_io_audit(self, event: str, payload: dict[str, Any]) -> None:
+        audit_dir = Path(self._config.workspace_root).expanduser() / "audit"
+        audit_dir.mkdir(parents=True, exist_ok=True)
+        record = {
+            "ts": datetime.now(timezone.utc).isoformat(),
+            "event": event,
+            "provider": "openai",
+            "model": self._model,
+            **payload,
+        }
+        with open(audit_dir / "llm_io_audit.jsonl", "a", encoding="utf-8") as f:
+            f.write(json.dumps(record, ensure_ascii=False) + "\n")
+
     async def _chat(self, system: str, user: str) -> str:
-        async with httpx.AsyncClient(timeout=60.0) as client:
+        async with httpx.AsyncClient(timeout=120.0) as client:
             resp = await client.post(
                 f"{self._base_url}/chat/completions",
                 headers={
@@ -78,21 +93,79 @@ class OpenAILLM(LLMInterface):
         if cleaned.startswith("```"):
             lines = cleaned.split("\n")
             cleaned = "\n".join(lines[1:-1]) if len(lines) > 2 else cleaned
-        return json.loads(cleaned)
+        try:
+            parsed = json.loads(cleaned)
+            self._append_io_audit(
+                "json_parse_ok",
+                {"mode": "direct", "response_chars": len(cleaned)},
+            )
+            return parsed
+        except json.JSONDecodeError as e:
+            extracted = _extract_first_json_block(cleaned)
+            if extracted is None:
+                logger.warning(
+                    "JSON parse failed, no JSON block found (model=%s, chars=%d). Raw:\n%s",
+                    self._model, len(cleaned), cleaned[:1000],
+                )
+                self._append_io_audit(
+                    "json_parse_failed",
+                    {
+                        "mode": "no_json_block",
+                        "error": str(e),
+                        "response_chars": len(cleaned),
+                        "response_head": cleaned[:500],
+                    },
+                )
+                raise
+            try:
+                parsed = json.loads(extracted)
+            except json.JSONDecodeError as e2:
+                logger.warning(
+                    "JSON parse failed on extracted block (model=%s, raw_chars=%d, extracted_chars=%d). "
+                    "Raw:\n%s\n---Extracted:\n%s",
+                    self._model, len(cleaned), len(extracted),
+                    cleaned[:500], extracted[:500],
+                )
+                self._append_io_audit(
+                    "json_parse_failed",
+                    {
+                        "mode": "extracted_block_failed",
+                        "error": str(e2),
+                        "response_chars": len(cleaned),
+                        "response_head": cleaned[:500],
+                        "extracted_head": extracted[:500],
+                    },
+                )
+                raise
+            self._append_io_audit(
+                "json_parse_ok",
+                {"mode": "extracted_block", "response_chars": len(cleaned)},
+            )
+            return parsed
 
     async def materialize_signal(
         self,
         signal: Signal,
         session_context: str,
     ) -> MaterializeResult:
-        system = """You are a meta-learning analyst. Given a learning signal and session context,
-extract structured experience data. Respond with JSON containing:
-- scene: string (what the user was trying to do)
-- failure_signature: string|null (the specific error pattern, null if none)
-- root_cause: string (why the issue occurred)
-- resolution: string (how it was resolved)
-- meta_insight: string (transferable lesson learned)
-- task_type: one of "coding"|"devops"|"writing"|"debugging"|"configuration"|"_unclassified"
+        system = """You are a meta-learning analyst for AI agents. Given a learning signal
+and session context, extract structured experience data. Respond with JSON containing:
+- scene: string (what the agent was tasked with — read the FULL context carefully)
+- failure_signature: string|null (the specific STRATEGY error the agent made. Focus on procedural mistakes, not parameter-level details.)
+- root_cause: string (WHY the agent made this strategy error — what verification/step/constraint did it miss?)
+- resolution: string (what the CORRECT strategy/procedure should be — describe the right approach)
+- meta_insight: string (transferable lesson: a GENERAL rule applicable across similar tasks)
+- task_type: one of "coding"|"devops"|"writing"|"debugging"|"configuration"|"customer_service"|"professional_document"|"_unclassified"
+
+ANALYSIS GUIDELINES:
+1. Lines prefixed with [agent_tool] show tool invocations with args and results.
+2. Lines prefixed with [user_tool] show system-side tool results.
+3. The "User feedback" or "[evaluation_feedback]" field may contain QA supervisor / LLM evaluator feedback — use this as a diagnostic clue.
+4. Focus on STRATEGY-LEVEL patterns (verify before act, follow domain conventions, complete all deliverables, check requirements) not parameter-level details (specific IDs, amounts, filenames).
+5. Domain-specific strategy patterns:
+   - Customer service: verification discipline, policy compliance, multi-step completeness, topic switching.
+   - Professional documents: requirement coverage, domain standard adherence, formatting conventions, data accuracy, citation quality.
+   - Coding/DevOps: testing discipline, dependency management, error handling, edge case coverage.
 """
         user = f"""Signal ID: {signal.signal_id}
 Trigger: {signal.trigger_reason}
@@ -102,8 +175,8 @@ Error: {signal.error_snapshot or 'N/A'}
 Resolution: {signal.resolution_snapshot or 'N/A'}
 User feedback: {signal.user_feedback or 'N/A'}
 
-Session context (truncated):
-{session_context[:3000]}"""
+Session context:
+{session_context[:6000]}"""
 
         try:
             data = await self._chat_json(system, user)
@@ -117,6 +190,13 @@ Session context (truncated):
             )
         except Exception as e:
             logger.warning("materialize_signal LLM call failed: %s", e)
+            self._append_io_audit(
+                "materialize_fallback",
+                {
+                    "signal_id": signal.signal_id,
+                    "reason": str(e),
+                },
+            )
             return _fallback_materialize(signal)
 
     async def judge_same_class(
@@ -154,12 +234,36 @@ Experience B:
         experiences: list[Experience],
     ) -> TaxonomyExtraction:
         system = """You extract a taxonomy entry from a cluster of similar experiences.
+
+CRITICAL DISTINCTION — two kinds of knowledge to extract:
+1. **User persistent preferences**: specific values, paths, conventions, or constraints the user stated
+   (e.g. "~/projects/", "always use feature branches", "never use bare except").
+   These MUST be preserved verbatim in fix_sop and prevention — they are NOT "task-specific parameters",
+   they are cross-session user rules.
+2. **Strategy patterns**: general procedural steps (e.g. "verify deliverables before stopping").
+   These should be concrete and actionable, not abstract advice.
+
+When in doubt, PRESERVE the specific value from the experiences. It is far worse to abstract away
+a concrete user preference into vague advice than to include a specific value that might not apply.
+
 Respond with JSON:
-- name: string (concise category name)
-- trigger: string (when does this error pattern occur)
-- fix_sop: string (standard fix procedure, step by step)
-- prevention: string (how to prevent this in the future)
-- keywords: string[] (5-10 indexing keywords for quick matching)"""
+- name: string (concise pattern name, e.g. "Always Create Projects Under ~/projects/", "Use Feature Branches Before Committing")
+- trigger: string (when this rule applies — describe the situation type)
+- fix_sop: string (a CONCRETE step-by-step checklist with SPECIFIC values from the experiences. e.g.:
+  "1. Create the project under ~/projects/ using `mkdir -p ~/projects/<project_name>`\\n2. Verify with `ls ~/projects/`"
+  NOT "Scan conversation history for path constraints" — the agent has no access to past conversations)
+- prevention: string (a specific, directly executable rule with concrete values, e.g.
+  "Always create new projects under ~/projects/, never in the current working directory"
+  NOT "Check if the user has a preferred directory")
+- keywords: string[] (5-10 keywords for matching)
+
+IMPORTANT:
+- fix_sop and prevention MUST contain CONCRETE ACTIONS an agent can execute RIGHT NOW without
+  needing to look up past conversations or ask the user. The taxonomy IS the memory.
+- Include specific paths, branch naming conventions, exception types, tool commands, etc.
+  from the experiences — these are the learned knowledge, not noise to be generalized away.
+- The entry must still be TRANSFERABLE: applicable to similar future tasks, not just the exact
+  task in the experiences."""
 
         exp_summaries = "\n\n".join(
             f"[{e.id}] {e.scene}\n  Failure: {e.failure_signature}\n  Root cause: {e.root_cause}\n  Resolution: {e.resolution}"
@@ -352,16 +456,55 @@ def _parse_skill_action(value: str) -> SkillUpdateAction:
 
 def _fallback_materialize(signal: Signal) -> MaterializeResult:
     task_type = TaskType.UNCLASSIFIED
-    for tt in TaskType:
-        if tt.value != "_unclassified" and tt.value in signal.task_summary.lower():
-            task_type = tt
-            break
+    summary_lower = signal.task_summary.lower()
+    if any(kw in summary_lower for kw in ("customer", "airline", "reservation", "flight", "cancel")):
+        task_type = TaskType.CUSTOMER_SERVICE
+    else:
+        for tt in TaskType:
+            if tt.value != "_unclassified" and tt.value in summary_lower:
+                task_type = tt
+                break
+
+    resolution = signal.resolution_snapshot or signal.user_feedback or "No resolution captured"
+    root_cause = signal.user_feedback or f"Derived from: {signal.resolution_snapshot or 'unknown'}"
 
     return MaterializeResult(
         scene=signal.task_summary,
         failure_signature=signal.error_snapshot,
-        root_cause=f"Derived from: {signal.resolution_snapshot or 'unknown'}",
-        resolution=signal.resolution_snapshot or "No resolution captured",
-        meta_insight=f"Signal {signal.signal_id}: {', '.join(signal.keywords)}",
+        root_cause=root_cause,
+        resolution=resolution,
+        meta_insight=signal.user_feedback or f"Signal {signal.signal_id}: {', '.join(signal.keywords)}",
         task_type=task_type,
     )
+
+
+def _extract_first_json_block(text: str) -> str | None:
+    starts = [i for i, ch in enumerate(text) if ch in "{["]
+    for start in starts:
+        stack: list[str] = []
+        in_string = False
+        escape = False
+        for idx in range(start, len(text)):
+            ch = text[idx]
+            if in_string:
+                if escape:
+                    escape = False
+                elif ch == "\\":
+                    escape = True
+                elif ch == '"':
+                    in_string = False
+                continue
+            if ch == '"':
+                in_string = True
+                continue
+            if ch in "{[":
+                stack.append(ch)
+            elif ch in "}]":
+                if not stack:
+                    break
+                opener = stack.pop()
+                if (opener == "{" and ch != "}") or (opener == "[" and ch != "]"):
+                    break
+                if not stack:
+                    return text[start : idx + 1]
+    return None

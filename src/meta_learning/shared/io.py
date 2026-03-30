@@ -153,26 +153,91 @@ def save_error_taxonomy(taxonomy: ErrorTaxonomy, config: MetaLearningConfig) -> 
 
 
 def read_session_context(
-    session_id: str, config: MetaLearningConfig, max_lines: int = 200
+    session_id: str,
+    config: MetaLearningConfig,
+    max_chars: int = 6000,
 ) -> str:
-    sessions_dir = Path(config.sessions_full_path)
-    session_file = sessions_dir / f"{session_id}.jsonl"
+    """Read session and return a head + tail summary that fits within *max_chars*.
+
+    Tool-call entries are condensed to one line each to maximise conversational
+    coverage within the budget.
+    """
+    session_file = resolve_session_file(session_id, config)
     if not session_file.exists():
         return f"Session {session_id} not found"
-    lines = []
+
+    all_lines: list[str] = []
     with open(session_file) as f:
-        for i, line in enumerate(f):
-            if i >= max_lines:
-                break
+        for raw in f:
             try:
-                record = json.loads(line.strip())
-                role = record.get("role", "unknown")
-                content = record.get("content", "")
-                if isinstance(content, str) and content.strip():
-                    lines.append(f"[{role}] {content[:500]}")
+                record = json.loads(raw.strip())
             except json.JSONDecodeError:
                 continue
-    return "\n".join(lines) if lines else f"Session {session_id}: no readable content"
+            role = record.get("role", "unknown")
+            content = record.get("content", "")
+            if not (isinstance(content, str) and content.strip()):
+                continue
+            if role in ("agent_tool", "user_tool"):
+                all_lines.append(f"[{role}] {content[:500]}")
+            else:
+                all_lines.append(f"[{role}] {content[:500]}")
+
+    if not all_lines:
+        return f"Session {session_id}: no readable content"
+
+    full = "\n".join(all_lines)
+    if len(full) <= max_chars:
+        return full
+
+    head_budget = int(max_chars * 0.45)
+    tail_budget = int(max_chars * 0.45)
+    sep = "\n\n... [middle of conversation omitted] ...\n\n"
+
+    head_lines: list[str] = []
+    head_len = 0
+    for ln in all_lines:
+        if head_len + len(ln) + 1 > head_budget:
+            break
+        head_lines.append(ln)
+        head_len += len(ln) + 1
+
+    tail_lines: list[str] = []
+    tail_len = 0
+    for ln in reversed(all_lines):
+        if tail_len + len(ln) + 1 > tail_budget:
+            break
+        tail_lines.insert(0, ln)
+        tail_len += len(ln) + 1
+
+    return "\n".join(head_lines) + sep + "\n".join(tail_lines)
+
+
+def resolve_session_file(session_id: str, config: MetaLearningConfig) -> Path:
+    """
+    Resolve the real session jsonl path across known layouts.
+
+    A/B runs may store sessions under `<workspace_root>/sessions` while
+    `sessions_root` can point to another directory.
+    """
+    sessions_dir = Path(config.sessions_full_path).expanduser()
+    workspace_sessions_dir = Path(config.workspace_root).expanduser() / "sessions"
+    candidate_dirs: list[Path] = []
+    for d in [sessions_dir, workspace_sessions_dir]:
+        if d not in candidate_dirs:
+            candidate_dirs.append(d)
+
+    normalized = session_id.replace(":", "_")
+    candidate_names: list[str] = [f"{session_id}.jsonl"]
+    if normalized != session_id:
+        candidate_names.append(f"{normalized}.jsonl")
+
+    for base in candidate_dirs:
+        for name in candidate_names:
+            p = base / name
+            if p.exists():
+                return p
+
+    return sessions_dir / f"{session_id}.jsonl"
 
 
 class _IdCounter:

@@ -4,6 +4,7 @@ import json
 import logging
 from datetime import datetime
 from pathlib import Path
+from typing import Any
 
 from meta_learning.layer2.consolidate import Consolidator
 from meta_learning.layer2.materialize import Materializer
@@ -26,6 +27,22 @@ class Layer2Orchestrator:
         self._consolidator = Consolidator(config, llm)
         self._taxonomy_builder = TaxonomyBuilder(config, llm)
         self._skill_evolver = SkillEvolver(config, llm)
+
+    def _trace_path(self) -> Path:
+        return Path(self._config.workspace_root).expanduser() / "audit" / "layer2_trace.jsonl"
+
+    def _trace(self, event: str, payload: dict[str, Any]) -> None:
+        trace_path = self._trace_path()
+        trace_path.parent.mkdir(parents=True, exist_ok=True)
+        record = {
+            "ts": datetime.now().isoformat(),
+            "event": event,
+            "experiment_id": self._config.experiment.experiment_id if self._config.experiment.enabled else None,
+            "experiment_group": self._config.experiment.group.value if self._config.experiment.enabled else None,
+            **payload,
+        }
+        with open(trace_path, "a", encoding="utf-8") as f:
+            f.write(json.dumps(record, ensure_ascii=False) + "\n")
 
     def should_trigger(self) -> bool:
         pending = list_pending_signals(self._config)
@@ -54,27 +71,45 @@ class Layer2Orchestrator:
             logger.info("Layer 2 pipeline starting")
 
         logger.info("Step 0: Materializing signals")
+        self._trace("step_start", {"step": "materialize"})
         new_experiences = await self._materializer.materialize_all_pending()
         logger.info("Materialized %d experiences", len(new_experiences))
+        self._trace("step_done", {"step": "materialize", "materialized_count": len(new_experiences)})
 
         logger.info("Step 1: Consolidating experiences")
+        self._trace("step_start", {"step": "consolidate"})
         index = await self._consolidator.consolidate()
         logger.info("Consolidation complete, %d total clusters", len(index.clusters))
+        self._trace("step_done", {"step": "consolidate", "cluster_count": len(index.clusters)})
 
         ready_clusters = self._consolidator.get_clusters_ready_for_taxonomy()
         logger.info(
             "Step 2: Building taxonomy from %d ready clusters", len(ready_clusters)
         )
+        self._trace("step_start", {"step": "taxonomy", "ready_clusters": len(ready_clusters)})
         new_taxonomy_entries = await self._taxonomy_builder.build_from_clusters(
             ready_clusters
         )
         logger.info("Created %d new taxonomy entries", len(new_taxonomy_entries))
+        self._trace(
+            "step_done",
+            {"step": "taxonomy", "new_taxonomy_entries": len(new_taxonomy_entries)},
+        )
 
         logger.info("Step 3: Evolving skills")
+        self._trace("step_start", {"step": "skill_evolve"})
         skill_results = await self._skill_evolver.evolve_from_taxonomy(
             new_taxonomy_entries
         )
         logger.info("Skill evolution complete, %d results", len(skill_results))
+        self._trace(
+            "step_done",
+            {
+                "step": "skill_evolve",
+                "skill_results": len(skill_results),
+                "skill_updates": len([r for r in skill_results if r.action.value != "none"]),
+            },
+        )
 
         self._save_last_run_time()
 
@@ -88,6 +123,15 @@ class Layer2Orchestrator:
             experiment_group=exp_cfg.group.value if exp_cfg.enabled else None,
         )
         logger.info("Layer 2 pipeline complete: %s", result)
+        self._trace(
+            "pipeline_complete",
+            {
+                "materialized_count": result.materialized_count,
+                "total_clusters": result.total_clusters,
+                "new_taxonomy_entries": result.new_taxonomy_entries,
+                "skill_updates": result.skill_updates,
+            },
+        )
         return result
 
     def _state_path(self) -> Path:

@@ -7,6 +7,7 @@ from meta_learning.shared.io import (
     mark_signal_processed,
     next_experience_id,
     read_session_context,
+    resolve_session_file,
     write_experience,
 )
 from meta_learning.shared.llm import LLMInterface
@@ -26,6 +27,22 @@ class Materializer:
         pending = list_pending_signals(self._config)
         if not pending:
             return []
+
+        # Guardrail: if any non-unknown session cannot be resolved, block this run
+        # to avoid generating taxonomy from degraded "Session not found" context.
+        missing_sessions = [
+            s.session_id
+            for s in pending
+            if s.session_id
+            and s.session_id != "unknown"
+            and not resolve_session_file(s.session_id, self._config).exists()
+        ]
+        if missing_sessions:
+            unique_ids = sorted(set(missing_sessions))
+            raise RuntimeError(
+                "Unresolved session context detected; materialize is blocked: "
+                + ", ".join(unique_ids[:10])
+            )
 
         experiences: list[Experience] = []
         for signal in pending:

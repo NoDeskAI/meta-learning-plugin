@@ -8,6 +8,9 @@ dependencies = [
     "pydantic>=2.6,<3",
     "pyyaml>=6.0,<7",
     "httpx>=0.27,<1",
+    "openai>=2.30.0",
+    "numpy>=2.4.3",
+    "scipy>=1.17.1",
 ]
 
 [project.optional-dependencies]
@@ -15,6 +18,9 @@ dev = [
     "pytest>=8.0,<9",
     "pytest-asyncio>=0.24,<1",
     "ruff>=0.9,<1",
+]
+mcp = [
+    "mcp>=1.20",
 ]
 
 [build-system]

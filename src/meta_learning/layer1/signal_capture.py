@@ -28,6 +28,9 @@ class SignalCapture:
         if context.errors_fixed and context.errors_encountered:
             return TriggerReason.ERROR_RECOVERY
 
+        if context.errors_encountered:
+            return TriggerReason.ERROR_RECOVERY
+
         if context.user_corrections:
             return TriggerReason.USER_CORRECTION
 
@@ -47,12 +50,12 @@ class SignalCapture:
         keywords = _extract_keywords(context)
 
         error_snapshot: str | None = None
-        if trigger == TriggerReason.ERROR_RECOVERY and context.errors_encountered:
-            error_snapshot = context.errors_encountered[0][:500]
+        if context.errors_encountered:
+            error_snapshot = "\n---\n".join(context.errors_encountered)[:2000]
 
         resolution_snapshot: str | None = None
         if context.extra.get("resolution"):
-            resolution_snapshot = str(context.extra["resolution"])[:200]
+            resolution_snapshot = str(context.extra["resolution"])[:1000]
 
         user_feedback: str | None = None
         if context.user_corrections:
@@ -91,6 +94,14 @@ class SignalCapture:
 def _extract_keywords(context: TaskContext) -> list[str]:
     keywords: list[str] = []
 
+    for tool in context.tools_used:
+        if tool and tool not in keywords:
+            keywords.append(tool)
+
+    for tool in context.new_tools:
+        if tool and tool not in keywords:
+            keywords.append(tool)
+
     for error in context.errors_encountered[:3]:
         tokens = error.split()
         for token in tokens:
@@ -101,12 +112,8 @@ def _extract_keywords(context: TaskContext) -> list[str]:
                 and cleaned not in keywords
             ):
                 keywords.append(cleaned)
-                if len(keywords) >= 10:
+                if len(keywords) >= 15:
                     break
-
-    for tool in context.new_tools:
-        if tool not in keywords:
-            keywords.append(tool)
 
     if not keywords:
         words = context.task_description.split()

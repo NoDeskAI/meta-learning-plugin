@@ -1,0 +1,65 @@
+taxonomy:
+  debugging:
+    general:
+    - confidence: 0.7997547516634793
+      created_at: '2026-03-25'
+      fix_sop: '1. Acknowledge the user''s original cancellation request clearly (e.g.,
+        ''I understand you want to cancel reservation M20IZO'')
+
+        2. If cancellation cannot proceed due to policy, explain the specific reason
+        clearly to the user
+
+        3. Explicitly close the original cancellation request before taking any new
+        action (e.g., ''I''m unable to cancel your reservation due to policy. Is there
+        anything else I can help you with?'')
+
+        4. If user expresses interest in alternatives like rebooking, explicitly confirm:
+        ''So instead of cancelling M20IZO, you''d like me to search for new flights?
+        I want to make sure I address exactly what you need.''
+
+        5. Only after explicit user consent, proceed with the new task (new booking,
+        policy escalation, etc.)
+
+        6. Never use cancel_reservation and book_reservation interchangeably—they
+        are separate tasks requiring separate authorizations'
+      id: tax-deb-gen-001
+      keywords:
+      - cancellation request
+      - task pivot
+      - new booking unauthorized
+      - scope drift
+      - task abandonment
+      - reservation M20IZO
+      - silver member
+      - cancel_reservation tool
+      - book_reservation tool
+      - policy denial
+      last_verified: '2026-03-25'
+      name: Agent Pivots to New Booking Instead of Completing Cancellation
+      prevention: '1. Treat each user request type as a distinct task that must be
+        completed or explicitly closed before moving to another
+
+        2. Train agents to recognize task scope drift and self-correct by re-stating
+        the original request
+
+        3. Require explicit user confirmation before pivoting from cancellation to
+        rebooking or any other action type
+
+        4. Implement a ''close request'' step where agents must clearly state the
+        outcome of the original request before offering alternatives
+
+        5. Use tool call logging to detect when agents switch from cancel_reservation
+        to book_reservation without proper authorization
+
+        6. Create guardrails where cancelling and booking are treated as mutually
+        exclusive actions requiring separate user intents'
+      source_exps:
+      - exp-001
+      - exp-003
+      - exp-004
+      - exp-005
+      - exp-006
+      trigger: When a user explicitly requests flight cancellation but the agent determines
+        the cancellation cannot proceed (policy denial, missing information, etc.)
+        and then silently pivots to booking a new flight without explicitly closing
+        the original cancellation request or obtaining user consent to change tasks

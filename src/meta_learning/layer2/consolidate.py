@@ -1,10 +1,14 @@
 from __future__ import annotations
 
 import logging
-from collections import deque
+from collections import defaultdict
 from datetime import datetime
 from pathlib import Path
 from typing import Callable
+
+import numpy as np
+from scipy.cluster.hierarchy import fcluster, linkage
+from scipy.spatial.distance import squareform
 
 from meta_learning.shared.io import (
     list_all_experiences,
@@ -159,21 +163,26 @@ class Consolidator:
             if e.confidence >= self._config.confidence.prune_threshold
         ]
 
+        index = load_experience_index(self._config)
+        old_promoted_map = _build_promoted_map(index)
         grouped = _group_by_task_type(valid_exps)
 
-        index = load_experience_index(self._config)
-        already_clustered = _already_clustered_ids(index)
+        stale_taxonomy_ids: set[str] = set()
 
         for task_type, exps in grouped.items():
-            unclustered = [e for e in exps if e.id not in already_clustered]
-            if not unclustered:
-                continue
-
             new_clusters = await self._cluster_within_group(
-                task_type, unclustered, index
+                task_type, exps, index
             )
-            index.clusters.extend(new_clusters)
+            stale_taxonomy_ids.update(
+                _detect_stale_taxonomies(old_promoted_map, new_clusters)
+            )
+            index.clusters = _replace_task_clusters(
+                index=index,
+                task_type=task_type,
+                clusters_for_task=new_clusters,
+            )
 
+        self._stale_taxonomy_ids = stale_taxonomy_ids
         index.last_updated = datetime.now()
         save_experience_index(index, self._config)
         return index
@@ -204,67 +213,39 @@ class Consolidator:
             return []
 
         consolidate_cfg = self._config.layer2.consolidate
-        similarity_threshold = consolidate_cfg.similarity_threshold
-        use_llm = consolidate_cfg.use_llm_clustering
-        max_llm_calls = consolidate_cfg.max_llm_calls_per_group
-
-        adjacency: dict[str, set[str]] = {e.id: set() for e in experiences}
+        distance_threshold = 1.0 - consolidate_cfg.similarity_threshold
+        n = len(experiences)
         exp_map = {e.id: e for e in experiences}
 
-        # Phase 1 — lightweight pre-filter: O(N^2) text similarity (cheap)
-        # splits pairs into auto-merge (high sim) vs LLM-candidates (moderate sim)
-        candidate_pairs: list[tuple[Experience, Experience]] = []
-        auto_merge_pairs: list[tuple[str, str]] = []
+        sim_matrix = np.zeros((n, n))
+        for i in range(n):
+            for j in range(i + 1, n):
+                sim = _compute_similarity(experiences[i], experiences[j])
+                sim_matrix[i, j] = sim
+                sim_matrix[j, i] = sim
 
-        for i, exp_a in enumerate(experiences):
-            for exp_b in experiences[i + 1 :]:
-                sim = _compute_similarity(exp_a, exp_b)
-                if sim >= 0.7:
-                    auto_merge_pairs.append((exp_a.id, exp_b.id))
-                elif sim >= similarity_threshold:
-                    candidate_pairs.append((exp_a, exp_b))
+        dist_matrix = 1.0 - sim_matrix
+        np.fill_diagonal(dist_matrix, 0.0)
+        condensed = squareform(dist_matrix, checks=False)
 
-        for id_a, id_b in auto_merge_pairs:
-            adjacency[id_a].add(id_b)
-            adjacency[id_b].add(id_a)
+        Z = linkage(condensed, method="average")
+        labels = fcluster(Z, t=distance_threshold, criterion="distance")
 
-        # Phase 2 — LLM confirmation on ambiguous pairs (capped at max_llm_calls)
-        if use_llm and candidate_pairs:
-            llm_calls = 0
-            for exp_a, exp_b in candidate_pairs:
-                if llm_calls >= max_llm_calls:
-                    logger.info(
-                        "LLM call cap reached (%d); skipping remaining %d candidate pairs",
-                        max_llm_calls,
-                        len(candidate_pairs) - llm_calls,
-                    )
-                    break
-                judgment = await self._llm.judge_same_class(exp_a, exp_b)
-                llm_calls += 1
-                if judgment.same_class:
-                    adjacency[exp_a.id].add(exp_b.id)
-                    adjacency[exp_b.id].add(exp_a.id)
+        label_groups: dict[int, list[int]] = defaultdict(list)
+        for idx, label in enumerate(labels):
+            label_groups[label].append(idx)
 
-        # Phase 3 — BFS connected-component discovery
         clusters: list[ExperienceCluster] = []
-        visited: set[str] = set()
-
-        for exp_id in adjacency:
-            if exp_id in visited:
+        for members in label_groups.values():
+            if len(members) < 2:
                 continue
-            component = _bfs_component(exp_id, adjacency)
-            visited.update(component)
-
-            if len(component) < 2:
-                continue
-
-            representative_exp = exp_map[sorted(component)[0]]
+            member_ids = sorted(experiences[i].id for i in members)
+            representative = exp_map[member_ids[0]]
             cluster = ExperienceCluster(
                 cluster_id=next_cluster_id(index),
                 task_type=task_type,
-                failure_signature_pattern=representative_exp.failure_signature
-                or "unknown",
-                experience_ids=sorted(component),
+                failure_signature_pattern=representative.failure_signature or "unknown",
+                experience_ids=member_ids,
             )
             clusters.append(cluster)
 
@@ -273,10 +254,15 @@ class Consolidator:
     def get_clusters_ready_for_taxonomy(self) -> list[ExperienceCluster]:
         index = load_experience_index(self._config)
         min_size = self._config.layer2.consolidate.min_cluster_size_for_taxonomy
+        stale = getattr(self, "_stale_taxonomy_ids", set())
         return [
             c
             for c in index.clusters
-            if len(c.experience_ids) >= min_size and c.promoted_to_taxonomy is None
+            if len(c.experience_ids) >= min_size
+            and (
+                c.promoted_to_taxonomy is None
+                or c.promoted_to_taxonomy in stale
+            )
         ]
 
 
@@ -289,25 +275,40 @@ def _group_by_task_type(
     return groups
 
 
-def _already_clustered_ids(index: ExperienceIndex) -> set[str]:
-    ids: set[str] = set()
+def _build_promoted_map(
+    index: ExperienceIndex,
+) -> dict[str, set[str]]:
+    """Map taxonomy_id -> set of experience_ids that were in its cluster."""
+    result: dict[str, set[str]] = {}
     for cluster in index.clusters:
-        ids.update(cluster.experience_ids)
-    return ids
+        if cluster.promoted_to_taxonomy:
+            result[cluster.promoted_to_taxonomy] = set(cluster.experience_ids)
+    return result
 
 
-def _bfs_component(start: str, adjacency: dict[str, set[str]]) -> set[str]:
-    visited: set[str] = set()
-    queue: deque[str] = deque([start])
-    while queue:
-        node = queue.popleft()
-        if node in visited:
-            continue
-        visited.add(node)
-        for neighbor in adjacency.get(node, set()):
-            if neighbor not in visited:
-                queue.append(neighbor)
-    return visited
+def _detect_stale_taxonomies(
+    old_promoted_map: dict[str, set[str]],
+    new_clusters: list[ExperienceCluster],
+) -> set[str]:
+    """Find taxonomy entries whose underlying cluster membership changed."""
+    stale: set[str] = set()
+    new_cluster_sets = [set(c.experience_ids) for c in new_clusters]
+    for tax_id, old_members in old_promoted_map.items():
+        still_together = any(old_members <= s for s in new_cluster_sets)
+        if not still_together:
+            stale.add(tax_id)
+            logger.info("Taxonomy %s marked stale (cluster membership changed)", tax_id)
+    return stale
+
+
+def _replace_task_clusters(
+    *,
+    index: ExperienceIndex,
+    task_type: TaskType,
+    clusters_for_task: list[ExperienceCluster],
+) -> list[ExperienceCluster]:
+    keep_other = [c for c in index.clusters if c.task_type != task_type]
+    return keep_other + clusters_for_task
 
 
 def _resolve_experience_image_paths(

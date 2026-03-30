@@ -1,0 +1,54 @@
+workspace_root: "/tmp/nobot_ab/A/workspace"
+sessions_root: "/tmp/nobot_ab/A/workspace/sessions"
+
+signal_buffer_dir: "signal_buffer"
+experience_pool_dir: "experience_pool"
+error_taxonomy_path: "error_taxonomy.yaml"
+skills_dir: "skills"
+
+layer1:
+  quick_think:
+    max_latency_ms: 50
+  signal_capture:
+    efficiency_anomaly_threshold: 2.0
+    average_step_count: 5
+
+layer2:
+  trigger:
+    min_pending_signals: 5
+    max_hours_since_last: 24
+  materialize:
+    initial_confidence: 0.6
+  consolidate:
+    min_cluster_size_for_taxonomy: 2
+    use_llm_clustering: true
+    max_llm_calls_per_group: 50
+    similarity_threshold: 0.3
+    batch_size: 10
+  taxonomy:
+    min_confidence_for_skill: 0.8
+    min_source_exps_for_skill: 2
+
+confidence:
+  hit_success_boost: 0.1
+  contradiction_penalty: 0.2
+  prune_threshold: 0.3
+  promote_threshold: 0.8
+  decay_enabled: true
+  decay_base: 0.95
+
+llm:
+  provider: "openai"
+  model: "minimax-m2.7"
+  temperature: 0.3
+  max_tokens: 2000
+
+dashscope:
+  enabled: true
+  model: "qwen3-vl-embedding"
+  dimension: 1024
+
+experiment:
+  experiment_id: "nobot-mcp-ab-20260323"
+  group: "A"
+  enabled: true

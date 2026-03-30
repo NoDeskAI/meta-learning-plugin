@@ -25,6 +25,8 @@ class TaskType(StrEnum):
     WRITING = "writing"
     DEBUGGING = "debugging"
     CONFIGURATION = "configuration"
+    CUSTOMER_SERVICE = "customer_service"
+    PROFESSIONAL_DOCUMENT = "professional_document"
     UNCLASSIFIED = "_unclassified"
 
 
@@ -123,6 +125,15 @@ class ErrorTaxonomy(BaseModel):
     def add_entry(self, domain: str, subdomain: str, entry: TaxonomyEntry) -> None:
         self.taxonomy.setdefault(domain, {}).setdefault(subdomain, []).append(entry)
 
+    def remove_entry(self, entry_id: str) -> bool:
+        for domain in self.taxonomy.values():
+            for subdomain, entries in domain.items():
+                for i, entry in enumerate(entries):
+                    if entry.id == entry_id:
+                        entries.pop(i)
+                        return True
+        return False
+
 
 class QuickThinkConfig(BaseModel):
     irreversible_keywords: list[str] = Field(
@@ -162,7 +173,7 @@ class MaterializeConfig(BaseModel):
 
 
 class ConsolidateConfig(BaseModel):
-    min_cluster_size_for_taxonomy: int = 3
+    min_cluster_size_for_taxonomy: int = 2
     use_llm_clustering: bool = True
     max_llm_calls_per_group: int = 50
     similarity_threshold: float = 0.3
@@ -228,6 +239,27 @@ class QuickThinkResult(BaseModel):
 
 
 class TaskContext(BaseModel):
+    """Context for a single task execution, used by Layer 1 signal capture.
+
+    Capability boundary
+    -------------------
+    All fields MUST originate from **agent-observable data** — full conversation,
+    tool call logs (names / args / results), coarse task outcome, and explicit
+    user or supervisor corrections.
+
+    Meta-learning is a **strategy and procedure learning system**.  It can learn:
+      - tool invocation order and policy compliance decisions (accept / refuse)
+      - multi-step procedure completeness (batch operations)
+      - verification discipline (check before act)
+
+    It CANNOT learn instance-specific parameters (exact flight numbers, monetary
+    amounts, database primary keys) because those are not transferable across
+    task instances.
+
+    Fields like ``user_corrections`` may also carry QA supervisor feedback
+    (e.g. NL assertion failures that describe *strategy-level* behaviours).
+    """
+
     task_description: str
     tools_used: list[str] = Field(default_factory=list)
     errors_encountered: list[str] = Field(default_factory=list)
