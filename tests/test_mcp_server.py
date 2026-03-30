@@ -313,6 +313,21 @@ class TestRunLayer3:
 # -----------------------------------------------------------------------
 
 
+class TestServerConfigEnv:
+    def test_sessions_root_env_override(self, workspace: Path, tmp_path: Path, monkeypatch):
+        monkeypatch.delenv("META_LEARNING_CONFIG", raising=False)
+        desk_sessions = tmp_path / "deskclaw_sessions"
+        desk_sessions.mkdir()
+        monkeypatch.setenv("META_LEARNING_WORKSPACE", str(workspace))
+        monkeypatch.setenv("META_LEARNING_SESSIONS_ROOT", str(desk_sessions))
+
+        from meta_learning.mcp_server import _load_server_config
+
+        cfg = _load_server_config()
+        assert cfg.workspace_root == str(workspace)
+        assert Path(cfg.sessions_root) == desk_sessions
+
+
 class TestResources:
     @pytest.mark.usefixtures("_env")
     def test_taxonomy_empty(self):

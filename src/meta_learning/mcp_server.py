@@ -52,6 +52,10 @@ def _load_server_config() -> MetaLearningConfig:
     if workspace:
         config.workspace_root = str(Path(workspace).expanduser())
 
+    sessions_root = os.environ.get("META_LEARNING_SESSIONS_ROOT")
+    if sessions_root:
+        config.sessions_root = str(Path(sessions_root).expanduser())
+
     return config
 
 

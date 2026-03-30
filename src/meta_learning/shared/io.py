@@ -218,6 +218,12 @@ def resolve_session_file(session_id: str, config: MetaLearningConfig) -> Path:
 
     A/B runs may store sessions under `<workspace_root>/sessions` while
     `sessions_root` can point to another directory.
+
+    DeskClaw (nanobot) 通常把会话放在 ``~/.deskclaw/nanobot/workspace/sessions/``，
+    文件名为 ``{channel}_{chat_id}.jsonl``，其中 ``chat_id`` 内可能含 ``:``（如
+    ``main:desk-xxx``），落盘时常写作 ``agent_main_desk-xxx.jsonl``。若 Signal 里的
+    ``session_id`` 仍带 ``:``，本函数会同时尝试 ``{session_id}.jsonl`` 与将 ``:``
+    替换为 ``_`` 后的文件名。
     """
     sessions_dir = Path(config.sessions_full_path).expanduser()
     workspace_sessions_dir = Path(config.workspace_root).expanduser() / "sessions"

@@ -118,6 +118,7 @@ venv/bin/python3 -m meta_learning run-layer3 --workspace ~/.openclaw/workspace
 - `capture_signal`
 - `run_layer2`
 - `run_layer3`
+- `sync_taxonomy_to_nobot`
 - `status`
 
 已暴露 MCP resources：
@@ -125,10 +126,28 @@ venv/bin/python3 -m meta_learning run-layer3 --workspace ~/.openclaw/workspace
 - `meta-learning://config`
 
 环境变量：
-- `META_LEARNING_WORKSPACE`：覆盖工作区路径
+- `META_LEARNING_WORKSPACE`：覆盖工作区路径（meta-learning 数据目录，如 signal_buffer、taxonomy）
 - `META_LEARNING_CONFIG`：指定配置文件路径
+- `META_LEARNING_SESSIONS_ROOT`：覆盖会话 JSONL 目录（MCP 启动时生效）。当工作区指向子目录（例如 `.../meta-learning-data`）而 DeskClaw 会话在仓库根下时，必须用此项或 `config.yaml` 里的 `sessions_root` 指向真实 sessions 目录。
 
 项目内示例配置见 `.cursor/mcp.json`。
+
+#### DeskClaw（Nanobot）会话与 meta-learning 对齐
+
+DeskClaw 的会话文件目录一般为：
+
+`~/.deskclaw/nanobot/workspace/sessions/`
+
+常见文件命名：`{channel}_{chat_id}.jsonl`，例如 `agent_main_desk-e3982f34.jsonl`（`channel` 如 `agent`；`chat_id` 逻辑上多为 `main:desk-...`，落盘时常把 `:` 融入/转为下划线后与 channel 拼接，具体以你机器上的文件名为准）。
+
+JSONL 行类型可包含：`metadata`、`user`、`assistant`、`tool` 等。另有一套按设备区分的日志在 `~/.deskclaw/logs/` 下，**物化（materialize）读上下文用的是 `workspace/sessions` 下的 JSONL**，不是 logs 目录。
+
+**重要**：若 `META_LEARNING_WORKSPACE` 设为 `~/.deskclaw/nanobot/workspace/meta-learning-data`（推荐，与数据与 skills 分离），则默认的 `workspace_root/sessions` 会指向 `meta-learning-data/sessions`，通常**不是**聊天会话所在位置。请同时配置：
+
+- `META_LEARNING_SESSIONS_ROOT=~/.deskclaw/nanobot/workspace/sessions`，或  
+- 在 `meta-learning-data/config.yaml` 中设置 `sessions_root: ~/.deskclaw/nanobot/workspace/sessions`
+
+并保证写入 Signal 的 `session_id` 与磁盘上的 basename（不含 `.jsonl`）一致；若 id 中含 `:`，解析时会额外尝试将 `:` 换成 `_` 的文件名（见 `resolve_session_file`）。
 
 ### 3) OpenClaw 插件（`openclaw-plugin/`）
 
