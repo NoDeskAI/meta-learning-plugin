@@ -1,4 +1,5 @@
 from datetime import date, datetime
+from pathlib import Path
 
 import pytest
 
@@ -9,13 +10,28 @@ from meta_learning.shared.models import (
     TriggerReason,
 )
 
+_MOCK_SESSION_CONTENT = (
+    '{"role":"user","content":"fix the error"}\n'
+    '{"role":"assistant","content":"done"}\n'
+)
+
+
+def _ensure_session_file(session_id: str, config) -> None:
+    sessions_dir = Path(config.sessions_full_path)
+    sessions_dir.mkdir(parents=True, exist_ok=True)
+    session_file = sessions_dir / f"{session_id}.jsonl"
+    if not session_file.exists():
+        session_file.write_text(_MOCK_SESSION_CONTENT)
+
 
 def _write_n_signals(n: int, tmp_config):
     for i in range(n):
+        session_id = f"session-{i}"
+        _ensure_session_file(session_id, tmp_config)
         sig = Signal(
             signal_id=f"sig-20260309-{i + 1:03d}",
             timestamp=datetime.now(),
-            session_id=f"session-{i}",
+            session_id=session_id,
             memory_date=date(2026, 3, 9),
             trigger_reason=TriggerReason.ERROR_RECOVERY,
             keywords=["error", "test"],
@@ -80,10 +96,12 @@ class TestLayer2Pipeline:
 class TestEndToEnd:
     async def test_signals_to_taxonomy(self, tmp_config, stub_llm):
         for i in range(5):
+            session_id = f"session-{i}"
+            _ensure_session_file(session_id, tmp_config)
             sig = Signal(
                 signal_id=f"sig-20260309-{i + 1:03d}",
                 timestamp=datetime.now(),
-                session_id=f"session-{i}",
+                session_id=session_id,
                 trigger_reason=TriggerReason.ERROR_RECOVERY,
                 keywords=["TS2345", "type", "error"],
                 task_summary=f"Fix coding type error #{i}",

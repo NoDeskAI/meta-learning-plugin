@@ -151,6 +151,9 @@ class QuickThinkConfig(BaseModel):
         ]
     )
     max_latency_ms: int = 50
+    vector_fallback_enabled: bool = True
+    vector_similarity_threshold: float = 0.65
+    vector_top_k: int = 3
 
 
 class SignalCaptureConfig(BaseModel):

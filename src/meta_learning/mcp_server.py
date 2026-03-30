@@ -74,6 +74,22 @@ _qt_index: QuickThinkIndex | None = None
 _taxonomy_mtime: float = 0.0
 
 
+def _make_embedding_fn(config: MetaLearningConfig):
+    """Create an embedding function if DashScope + vector fallback are enabled."""
+    if not config.dashscope.enabled:
+        return None
+    if not config.layer1.quick_think.vector_fallback_enabled:
+        return None
+    try:
+        from meta_learning.shared.embedding_dashscope import MultimodalEmbedding
+        emb = MultimodalEmbedding(config.dashscope)
+        logger.info("Vector fallback enabled (DashScope %s)", config.dashscope.model)
+        return emb.embed_text_only
+    except Exception:
+        logger.warning("Failed to create embedding function, vector fallback disabled", exc_info=True)
+        return None
+
+
 def _get_quick_think_index() -> QuickThinkIndex:
     global _qt_index, _taxonomy_mtime
 
@@ -85,7 +101,8 @@ def _get_quick_think_index() -> QuickThinkIndex:
     if _qt_index is None or current_mtime != _taxonomy_mtime:
         taxonomy = load_error_taxonomy(config)
         if _qt_index is None:
-            _qt_index = QuickThinkIndex(taxonomy, config)
+            embedding_fn = _make_embedding_fn(config)
+            _qt_index = QuickThinkIndex(taxonomy, config, embedding_fn=embedding_fn)
         else:
             _qt_index.update_taxonomy(taxonomy)
         _taxonomy_mtime = current_mtime
@@ -320,6 +337,36 @@ async def run_layer3() -> str:
         f"Layer 3 complete: patterns={len(result.cross_task_patterns)}, "
         f"gaps={len(result.capability_gaps)}, "
         f"recommendations={len(result.memory_recommendations)}"
+    )
+
+
+@mcp.tool()
+def sync_taxonomy_to_nobot(
+    nobot_workspace: str | None = None,
+) -> str:
+    """Sync the error taxonomy to nanobot workspace files.
+
+    Generates/updates:
+    - skills/meta-learning/SKILL.md (top-10 rules, always:true)
+    - skills/meta-learning/rules/*.md (categorized details for human review)
+
+    Args:
+        nobot_workspace: Path to the nanobot workspace root.
+            Defaults to ~/.deskclaw/nanobot/workspace.
+    """
+    config = _get_config()
+    workspace = nobot_workspace or os.path.expanduser("~/.deskclaw/nanobot/workspace")
+    skills_path = str(Path(workspace) / "skills")
+
+    from meta_learning.sync_nobot import sync_taxonomy_to_nobot_workspace
+
+    result = sync_taxonomy_to_nobot_workspace(config, skills_path)
+    if result.total_entries == 0:
+        return "No taxonomy entries to sync."
+    return (
+        f"Synced {result.total_entries} entries → "
+        f"SKILL.md (top-{result.top_n_in_skill}), "
+        f"{len(result.rules_written)} category files"
     )
 
 

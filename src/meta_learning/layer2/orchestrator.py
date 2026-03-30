@@ -12,7 +12,11 @@ from meta_learning.layer2.skill_evolve import SkillEvolver
 from meta_learning.layer2.taxonomy import TaxonomyBuilder
 from meta_learning.shared.io import list_pending_signals
 from meta_learning.shared.llm import LLMInterface
-from meta_learning.shared.models import MetaLearningConfig
+from meta_learning.shared.models import (
+    ExperienceCluster,
+    MetaLearningConfig,
+    TriggerReason,
+)
 
 logger = logging.getLogger(__name__)
 
@@ -70,11 +74,40 @@ class Layer2Orchestrator:
         else:
             logger.info("Layer 2 pipeline starting")
 
+        pending_signals = list_pending_signals(self._config)
+        signal_trigger_map = {s.signal_id: s.trigger_reason for s in pending_signals}
+
         logger.info("Step 0: Materializing signals")
         self._trace("step_start", {"step": "materialize"})
         new_experiences = await self._materializer.materialize_all_pending()
         logger.info("Materialized %d experiences", len(new_experiences))
         self._trace("step_done", {"step": "materialize", "materialized_count": len(new_experiences)})
+
+        fast_track_exps = [
+            e for e in new_experiences
+            if signal_trigger_map.get(e.source_signal) == TriggerReason.USER_CORRECTION
+        ]
+        fast_track_taxonomy = []
+        if fast_track_exps:
+            logger.info(
+                "Step 1a: Fast-track %d USER_CORRECTION experiences (skip clustering)",
+                len(fast_track_exps),
+            )
+            self._trace("step_start", {"step": "fast_track", "count": len(fast_track_exps)})
+            fast_track_clusters = [
+                ExperienceCluster(
+                    cluster_id=f"ft-{e.id}",
+                    task_type=e.task_type,
+                    failure_signature_pattern=e.failure_signature or "user_correction",
+                    experience_ids=[e.id],
+                )
+                for e in fast_track_exps
+            ]
+            fast_track_taxonomy = await self._taxonomy_builder.build_from_clusters(
+                fast_track_clusters
+            )
+            logger.info("Fast-track produced %d taxonomy entries", len(fast_track_taxonomy))
+            self._trace("step_done", {"step": "fast_track", "taxonomy": len(fast_track_taxonomy)})
 
         logger.info("Step 1: Consolidating experiences")
         self._trace("step_start", {"step": "consolidate"})
@@ -87,10 +120,12 @@ class Layer2Orchestrator:
             "Step 2: Building taxonomy from %d ready clusters", len(ready_clusters)
         )
         self._trace("step_start", {"step": "taxonomy", "ready_clusters": len(ready_clusters)})
-        new_taxonomy_entries = await self._taxonomy_builder.build_from_clusters(
+        cluster_taxonomy = await self._taxonomy_builder.build_from_clusters(
             ready_clusters
         )
-        logger.info("Created %d new taxonomy entries", len(new_taxonomy_entries))
+        new_taxonomy_entries = fast_track_taxonomy + cluster_taxonomy
+        logger.info("Created %d new taxonomy entries (%d fast-track + %d clustered)",
+                     len(new_taxonomy_entries), len(fast_track_taxonomy), len(cluster_taxonomy))
         self._trace(
             "step_done",
             {"step": "taxonomy", "new_taxonomy_entries": len(new_taxonomy_entries)},
@@ -132,7 +167,33 @@ class Layer2Orchestrator:
                 "skill_updates": result.skill_updates,
             },
         )
+
+        if result.new_taxonomy_entries > 0:
+            self._auto_sync_nobot()
+
         return result
+
+    def _auto_sync_nobot(self) -> None:
+        try:
+            from meta_learning.sync_nobot import sync_taxonomy_to_nobot_workspace
+
+            import os
+            nobot_workspace = os.path.expanduser("~/.deskclaw/nanobot/workspace")
+            skills_path = str(Path(nobot_workspace) / "skills")
+
+            if not Path(nobot_workspace).exists():
+                logger.debug("Nanobot workspace not found at %s, skipping auto-sync", nobot_workspace)
+                return
+
+            sync_result = sync_taxonomy_to_nobot_workspace(self._config, skills_path)
+            logger.info(
+                "Auto-synced taxonomy to nanobot: %d entries, top-%d in SKILL.md",
+                sync_result.total_entries,
+                sync_result.top_n_in_skill,
+            )
+            self._trace("auto_sync_nobot", {"total_entries": sync_result.total_entries})
+        except Exception:
+            logger.warning("Auto-sync to nanobot failed (non-fatal)", exc_info=True)
 
     def _state_path(self) -> Path:
         return Path(self._config.signal_buffer_path) / STATE_FILE

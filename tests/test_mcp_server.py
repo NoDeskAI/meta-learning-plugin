@@ -259,6 +259,41 @@ class TestRunLayer2:
 
 
 # -----------------------------------------------------------------------
+# sync_taxonomy_to_nobot
+# -----------------------------------------------------------------------
+
+
+class TestSyncTaxonomyToNobot:
+    @pytest.mark.usefixtures("_env")
+    def test_empty_taxonomy_message(self, tmp_path: Path):
+        nobot_root = tmp_path / "nanobot_ws"
+        (nobot_root / "skills").mkdir(parents=True)
+
+        from meta_learning.mcp_server import sync_taxonomy_to_nobot
+
+        msg = sync_taxonomy_to_nobot(nobot_workspace=str(nobot_root))
+        assert "No taxonomy" in msg
+
+    @pytest.mark.usefixtures("_env")
+    def test_writes_skill_under_skills_dir(self, workspace: Path, tmp_path: Path):
+        _write_taxonomy(workspace, _sample_taxonomy())
+        nobot_root = tmp_path / "nanobot_ws"
+        (nobot_root / "skills").mkdir(parents=True)
+
+        from meta_learning.mcp_server import sync_taxonomy_to_nobot
+
+        msg = sync_taxonomy_to_nobot(nobot_workspace=str(nobot_root))
+        assert "Synced" in msg
+        assert "SKILL.md" in msg
+
+        skill = nobot_root / "skills" / "meta-learning" / "SKILL.md"
+        assert skill.is_file()
+        text = skill.read_text(encoding="utf-8")
+        assert "Meta-Learning Rules" in text
+        assert "quick_think" in text
+
+
+# -----------------------------------------------------------------------
 # run_layer3
 # -----------------------------------------------------------------------
 
