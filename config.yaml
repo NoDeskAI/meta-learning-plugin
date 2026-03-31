@@ -54,8 +54,8 @@ confidence:
   decay_base: 0.95
 
 llm:
-  provider: "stub"
-  model: "gpt-4o"
+  provider: openai
+  model: "minimax-m2.7"
   temperature: 0.3
   max_tokens: 2000
 
