@@ -60,9 +60,10 @@ def _render_skill_md(entries: list[TaxonomyEntry], max_rules: int = 10) -> str:
     lines.append("")
     lines.append("## When to call meta-learning tools")
     lines.append("")
+    lines.append("- **MUST**: When the user corrects, disagrees with, or redirects your approach, IMMEDIATELY call `capture_signal` with `user_corrections` set to the user's exact feedback. Just saying \"understood\" is NOT enough — you must also call the tool. Learning consolidation runs automatically in the background.")
     lines.append("- Before risky or repetitive actions, call `quick_think` to get detailed guidance.")
-    lines.append("- After the user corrects your approach, call `capture_signal` with `user_corrections` populated.")
-    lines.append("- After calling `capture_signal`, if the response includes \"[Action Required]\", immediately call `run_layer2` to consolidate learnings into skills.")
+    lines.append("")
+    lines.append("Example: User says \"不对，应该用 X\" → call capture_signal(user_corrections=[\"不对，应该用 X\"]) → reply to user.")
     return "\n".join(lines) + "\n"
 
 

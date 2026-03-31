@@ -1,5 +1,6 @@
 from __future__ import annotations
 
+import logging
 from datetime import datetime
 
 from meta_learning.shared.io import (
@@ -17,6 +18,8 @@ from meta_learning.shared.models import (
     Signal,
 )
 
+logger = logging.getLogger(__name__)
+
 
 class Materializer:
     def __init__(self, config: MetaLearningConfig, llm: LLMInterface) -> None:
@@ -28,24 +31,19 @@ class Materializer:
         if not pending:
             return []
 
-        # Guardrail: if any non-unknown session cannot be resolved, block this run
-        # to avoid generating taxonomy from degraded "Session not found" context.
-        missing_sessions = [
-            s.session_id
-            for s in pending
-            if s.session_id
-            and s.session_id != "unknown"
-            and not resolve_session_file(s.session_id, self._config).exists()
-        ]
-        if missing_sessions:
-            unique_ids = sorted(set(missing_sessions))
-            raise RuntimeError(
-                "Unresolved session context detected; materialize is blocked: "
-                + ", ".join(unique_ids[:10])
-            )
+        processable: list[Signal] = []
+        for s in pending:
+            if s.session_id and s.session_id != "unknown":
+                if not resolve_session_file(s.session_id, self._config).exists():
+                    logger.warning(
+                        "Session file missing for %s (session=%s), "
+                        "proceeding without session context",
+                        s.signal_id, s.session_id,
+                    )
+            processable.append(s)
 
         experiences: list[Experience] = []
-        for signal in pending:
+        for signal in processable:
             exp = await self._materialize_one(signal)
             if exp is not None:
                 experiences.append(exp)
@@ -56,7 +54,14 @@ class Materializer:
     async def _materialize_one(self, signal: Signal) -> Experience | None:
         session_context = ""
         if signal.session_id and signal.session_id != "unknown":
-            session_context = read_session_context(signal.session_id, self._config)
+            resolved = resolve_session_file(signal.session_id, self._config)
+            if resolved.exists():
+                session_context = read_session_context(signal.session_id, self._config)
+            else:
+                logger.info(
+                    "Materializing %s without session context (file not found)",
+                    signal.signal_id,
+                )
 
         result = await self._llm.materialize_signal(signal, session_context)
 

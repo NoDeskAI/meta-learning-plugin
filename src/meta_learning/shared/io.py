@@ -236,6 +236,13 @@ def resolve_session_file(session_id: str, config: MetaLearningConfig) -> Path:
     candidate_names: list[str] = [f"{session_id}.jsonl"]
     if normalized != session_id:
         candidate_names.append(f"{normalized}.jsonl")
+    # nanobot convention: agent_{channel}_{chat_id}.jsonl
+    candidate_names.append(f"agent_{session_id}.jsonl")
+    if normalized != session_id:
+        candidate_names.append(f"agent_{normalized}.jsonl")
+    # session_id without channel prefix → default channel "main"
+    if ":" not in session_id and not session_id.startswith("agent_"):
+        candidate_names.append(f"agent_main_{session_id}.jsonl")
 
     for base in candidate_dirs:
         for name in candidate_names:

@@ -173,7 +173,8 @@ mcp = FastMCP(
     instructions=(
         "Meta-learning system for agent self-improvement. "
         "Use `quick_think` before executing risky tasks to get risk assessments. "
-        "Use `capture_signal` after completing a task to record learning signals. "
+        "Use `capture_signal` after completing a task to record learning signals — "
+        "Layer 2 consolidation runs automatically in the background when needed. "
         "Use `status` to check the learning system state."
     ),
 )
@@ -218,7 +219,7 @@ def quick_think(
 
 
 @mcp.tool()
-def capture_signal(
+async def capture_signal(
     task_description: str,
     session_id: str = "unknown",
     errors_encountered: list[str] | None = None,
@@ -235,6 +236,9 @@ def capture_signal(
     Analyzes the task outcome and, if a meaningful learning trigger is found
     (error recovery, user correction, new tool, efficiency anomaly), writes a
     YAML signal file to signal_buffer/ for later Layer 2 processing.
+
+    If Layer 2 trigger conditions are met, the consolidation pipeline runs
+    automatically in the background — no need to call run_layer2 separately.
 
     Call this AFTER completing a task, especially when:
     - You encountered and fixed errors
@@ -276,7 +280,6 @@ def capture_signal(
     if signal is None:
         return "no signal captured — task did not trigger any learning condition"
 
-    # Cross-link: register failure signature for QuickThink
     if signal.error_snapshot and _qt_index is not None:
         _qt_index.register_failure_signature(signal.error_snapshot)
 
@@ -291,10 +294,27 @@ def capture_signal(
     orchestrator = Layer2Orchestrator(config, _create_llm(config))
     pending = list_pending_signals(config)
     if orchestrator.should_trigger():
+        import asyncio
+
+        async def _run_layer2_background() -> None:
+            try:
+                bootstrap_multimodal_embedding(config)
+                bg_orchestrator = Layer2Orchestrator(config, _create_llm(config))
+                r = await bg_orchestrator.run_pipeline()
+                logger.info(
+                    "Background Layer 2 complete: materialized=%d, clusters=%d, "
+                    "new_taxonomy=%d, skill_updates=%d",
+                    r.materialized_count, r.total_clusters,
+                    r.new_taxonomy_entries, r.skill_updates,
+                )
+            except Exception:
+                logger.exception("Background Layer 2 pipeline failed")
+
+        asyncio.create_task(_run_layer2_background())
         result += (
-            f"\n\n[Action Required] Layer 2 trigger conditions met "
+            f"\n\nLayer 2 triggered in background "
             f"({len(pending)} pending signal(s)). "
-            f"Call `run_layer2` now to consolidate learnings into skills."
+            f"You can reply to the user now — learning is happening automatically."
         )
 
     return result
@@ -307,8 +327,9 @@ async def run_layer2(force: bool = False) -> str:
     Processes pending signals into structured experiences, clusters them,
     builds/updates the error taxonomy, and evolves skills.
 
-    Normally only runs when trigger conditions are met (>= 5 pending signals
-    or >= 24h since last run). Use force=True to override.
+    Trigger conditions: USER_CORRECTION signals trigger immediately (1 signal);
+    other signals trigger at >= 2 pending or >= 8h since last run.
+    Use force=True to override.
 
     Args:
         force: Run even if trigger conditions are not met.

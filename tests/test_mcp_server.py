@@ -126,19 +126,20 @@ class TestQuickThink:
 # -----------------------------------------------------------------------
 
 
+@pytest.mark.asyncio
 class TestCaptureSignal:
     @pytest.mark.usefixtures("_env")
-    def test_no_signal_for_clean_task(self):
+    async def test_no_signal_for_clean_task(self):
         from meta_learning.mcp_server import capture_signal
 
-        result = capture_signal(task_description="read a file")
+        result = await capture_signal(task_description="read a file")
         assert "no signal captured" in result
 
     @pytest.mark.usefixtures("_env")
-    def test_captures_error_recovery(self, workspace: Path):
+    async def test_captures_error_recovery(self, workspace: Path):
         from meta_learning.mcp_server import capture_signal
 
-        result = capture_signal(
+        result = await capture_signal(
             task_description="Fix TypeScript build error",
             errors_encountered=["TS2345: type mismatch"],
             errors_fixed=True,
@@ -151,10 +152,10 @@ class TestCaptureSignal:
         assert len(sig_files) == 1
 
     @pytest.mark.usefixtures("_env")
-    def test_captures_user_correction(self, workspace: Path):
+    async def test_captures_user_correction(self, workspace: Path):
         from meta_learning.mcp_server import capture_signal
 
-        result = capture_signal(
+        result = await capture_signal(
             task_description="Implement feature",
             user_corrections=["不对，应该用另一种方式"],
         )
@@ -162,10 +163,10 @@ class TestCaptureSignal:
         assert "user_correction" in result
 
     @pytest.mark.usefixtures("_env")
-    def test_captures_efficiency_anomaly(self, workspace: Path):
+    async def test_captures_efficiency_anomaly(self, workspace: Path):
         from meta_learning.mcp_server import capture_signal
 
-        result = capture_signal(
+        result = await capture_signal(
             task_description="Complex refactoring",
             step_count=30,
         )
@@ -173,10 +174,10 @@ class TestCaptureSignal:
         assert "efficiency_anomaly" in result
 
     @pytest.mark.usefixtures("_env")
-    def test_captures_new_tool(self, workspace: Path):
+    async def test_captures_new_tool(self, workspace: Path):
         from meta_learning.mcp_server import capture_signal
 
-        result = capture_signal(
+        result = await capture_signal(
             task_description="Deploy with Docker",
             new_tools=["docker_exec"],
         )
@@ -184,10 +185,10 @@ class TestCaptureSignal:
         assert "new_tool" in result
 
     @pytest.mark.usefixtures("_env")
-    def test_captures_resolution_and_images(self, workspace: Path):
+    async def test_captures_resolution_and_images(self, workspace: Path):
         from meta_learning.mcp_server import capture_signal
 
-        result = capture_signal(
+        result = await capture_signal(
             task_description="Fix flaky E2E test",
             errors_encountered=["Timeout waiting for selector"],
             errors_fixed=True,
@@ -207,17 +208,16 @@ class TestCaptureSignal:
         ]
 
     @pytest.mark.usefixtures("_env")
-    def test_user_correction_includes_action_required(self, workspace: Path):
+    async def test_user_correction_triggers_background_layer2(self, workspace: Path):
         from meta_learning.mcp_server import capture_signal
 
-        result = capture_signal(
+        result = await capture_signal(
             task_description="Implement feature incorrectly",
             user_corrections=["No, use the other API endpoint"],
         )
         assert "Signal captured" in result
         assert "user_correction" in result
-        assert "[Action Required]" in result
-        assert "run_layer2" in result
+        assert "Layer 2 triggered in background" in result
 
 
 # -----------------------------------------------------------------------
