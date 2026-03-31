@@ -43,6 +43,8 @@ logger = logging.getLogger("meta_learning.mcp")
 
 def _load_server_config() -> MetaLearningConfig:
     config_path = os.environ.get("META_LEARNING_CONFIG")
+    if config_path:
+        config_path = str(Path(config_path).expanduser())
     if config_path and Path(config_path).exists():
         config = load_config(config_path)
     else:

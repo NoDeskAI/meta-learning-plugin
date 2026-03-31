@@ -33,6 +33,7 @@ logger = logging.getLogger("meta_learning")
 def build_config(args: argparse.Namespace) -> MetaLearningConfig:
     config_path = getattr(args, "config", None)
     if config_path:
+        config_path = str(Path(config_path).expanduser())
         config = load_config(config_path)
     else:
         config = MetaLearningConfig()

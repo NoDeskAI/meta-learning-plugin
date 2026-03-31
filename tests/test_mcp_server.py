@@ -327,6 +327,29 @@ class TestServerConfigEnv:
         assert cfg.workspace_root == str(workspace)
         assert Path(cfg.sessions_root) == desk_sessions
 
+    def test_config_path_tilde_expansion(self, workspace: Path, tmp_path: Path, monkeypatch):
+        config_dir = tmp_path / "fake_home" / ".deskclaw" / "config"
+        config_dir.mkdir(parents=True)
+        config_file = config_dir / "config.yaml"
+        config_file.write_text(
+            "workspace_root: /tmp/test_ws\n"
+            "llm:\n"
+            "  provider: openai\n"
+            "  model: test-model\n",
+            encoding="utf-8",
+        )
+
+        tilde_path = str(config_file).replace(str(tmp_path / "fake_home"), "~")
+        monkeypatch.setenv("HOME", str(tmp_path / "fake_home"))
+        monkeypatch.setenv("META_LEARNING_CONFIG", tilde_path)
+        monkeypatch.delenv("META_LEARNING_WORKSPACE", raising=False)
+
+        from meta_learning.mcp_server import _load_server_config
+
+        cfg = _load_server_config()
+        assert cfg.llm.provider == "openai"
+        assert cfg.llm.model == "test-model"
+
 
 class TestResources:
     @pytest.mark.usefixtures("_env")

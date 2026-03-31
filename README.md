@@ -4,7 +4,9 @@
 
 ## 架构总览
 
-完整链路见 [`meta_learning_chain.drawio`](meta_learning_chain.drawio)（用 draw.io 打开），自上而下分为：
+**完整产品融合架构**（Nanobot / DeskClaw × MCP × 三层学习）见 [`meta_learning_chain_fusion.drawio`](meta_learning_chain_fusion.drawio)（用 draw.io 打开）。若只需看不含对话生态框图的**核心流水线**，可参考 [`meta_learning_chain.drawio`](meta_learning_chain.drawio)。
+
+自上而下分为：
 
 1. **入口层** — MCP Server / OpenClaw 插件 / CLI 三种接入方式
 2. **Layer 1 在线实时层** — QuickThink 风险评估（4 项检测维度）→ Agent 执行 → 信号捕获（4 类触发条件）→ 信号缓冲区
@@ -45,8 +47,8 @@ Meta-learning 仅使用 **agent 可观测数据**：
 
 ### Layer 1（在线）
 
-- `QuickThinkIndex`：基于 `TaskContext` 进行风险评估，当前包含 4 类信号检测
-  - `keyword_taxonomy_hit`：命中 `ErrorTaxonomy` 关键词
+- `QuickThinkIndex`：基于 `TaskContext` 进行风险评估，当前包含 4 类检测维度（与 [`meta_learning_chain_fusion.drawio`](meta_learning_chain_fusion.drawio) 中「混合检索」一致）
+  - `keyword_taxonomy_hit`：命中 `ErrorTaxonomy`——优先用**关键词子串**匹配；未命中且配置启用 `layer1.quick_think.vector_fallback_enabled`、MCP/运行时提供了 `embedding_fn` 时，对由 `task_description`、错误信息与工具名拼成的检索文本做**向量相似度**回退（阈值、top-k 见 `vector_similarity_threshold` / `vector_top_k`）
   - `irreversible_operation`：命中不可逆操作关键词（如 `rm -rf`、`drop table`、`force push`）
   - `recent_failure_pattern`：命中近期失败签名（需先注册）
   - `new_tool_usage`：命中新工具使用（基于 `new_tools` / 已知工具集合）
