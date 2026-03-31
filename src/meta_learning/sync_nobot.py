@@ -58,8 +58,11 @@ def _render_skill_md(entries: list[TaxonomyEntry], max_rules: int = 10) -> str:
         lines.append(f"- {entry.prevention}")
 
     lines.append("")
-    lines.append("Before risky or repetitive actions, call `quick_think` to get detailed guidance.")
-    lines.append("After the user corrects your approach, call `capture_signal` to record the lesson.")
+    lines.append("## When to call meta-learning tools")
+    lines.append("")
+    lines.append("- Before risky or repetitive actions, call `quick_think` to get detailed guidance.")
+    lines.append("- After the user corrects your approach, call `capture_signal` with `user_corrections` populated.")
+    lines.append("- After calling `capture_signal`, if the response includes \"[Action Required]\", immediately call `run_layer2` to consolidate learnings into skills.")
     return "\n".join(lines) + "\n"
 
 

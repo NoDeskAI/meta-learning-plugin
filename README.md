@@ -74,8 +74,8 @@ Meta-learning 仅使用 **agent 可观测数据**：
 4. `Skill Evolve`：根据新 taxonomy 条目创建/更新 `skills/*/SKILL.md`
 
 触发逻辑（`should_trigger()`）：
-- 待处理信号数 >= `layer2.trigger.min_pending_signals`（默认 5），或
-- 距上次运行超过 `layer2.trigger.max_hours_since_last`（默认 24h）且有待处理信号
+- 待处理信号数 >= `layer2.trigger.min_pending_signals`（默认 2），或
+- 距上次运行超过 `layer2.trigger.max_hours_since_last`（默认 8h）且有待处理信号
 
 ### Layer 3（离线深度学习）
 
