@@ -280,11 +280,24 @@ def capture_signal(
     if signal.error_snapshot and _qt_index is not None:
         _qt_index.register_failure_signature(signal.error_snapshot)
 
-    return (
+    result = (
         f"Signal captured: [{signal.signal_id}] "
         f"trigger={signal.trigger_reason.value}, "
         f"file={config.signal_buffer_path}/{signal.signal_id}.yaml"
     )
+
+    from meta_learning.layer2.orchestrator import Layer2Orchestrator
+
+    orchestrator = Layer2Orchestrator(config, _create_llm(config))
+    pending = list_pending_signals(config)
+    if orchestrator.should_trigger():
+        result += (
+            f"\n\n[Action Required] Layer 2 trigger conditions met "
+            f"({len(pending)} pending signal(s)). "
+            f"Call `run_layer2` now to consolidate learnings into skills."
+        )
+
+    return result
 
 
 @mcp.tool()

@@ -43,18 +43,47 @@ def _write_n_signals(n: int, tmp_config):
         write_signal(sig, tmp_config)
 
 
+def _write_user_correction_signal(tmp_config):
+    session_id = "session-uc"
+    _ensure_session_file(session_id, tmp_config)
+    sig = Signal(
+        signal_id="sig-20260309-uc1",
+        timestamp=datetime.now(),
+        session_id=session_id,
+        memory_date=date(2026, 3, 9),
+        trigger_reason=TriggerReason.USER_CORRECTION,
+        keywords=["correction"],
+        task_summary="User corrected approach",
+        user_feedback="Use async instead",
+        step_count=3,
+    )
+    write_signal(sig, tmp_config)
+
+
 class TestLayer2Trigger:
     def test_no_trigger_when_empty(self, tmp_config, stub_llm):
         orch = Layer2Orchestrator(tmp_config, stub_llm)
         assert orch.should_trigger() is False
 
     def test_triggers_on_min_signals(self, tmp_config, stub_llm):
-        _write_n_signals(5, tmp_config)
+        _write_n_signals(2, tmp_config)
         orch = Layer2Orchestrator(tmp_config, stub_llm)
         assert orch.should_trigger() is True
 
     def test_no_trigger_below_threshold_after_recent_run(self, tmp_config, stub_llm):
-        _write_n_signals(3, tmp_config)
+        _write_n_signals(1, tmp_config)
+        orch = Layer2Orchestrator(tmp_config, stub_llm)
+        orch._save_last_run_time()
+        assert orch.should_trigger() is False
+
+    def test_triggers_immediately_on_user_correction(self, tmp_config, stub_llm):
+        _write_user_correction_signal(tmp_config)
+        orch = Layer2Orchestrator(tmp_config, stub_llm)
+        orch._save_last_run_time()
+        assert orch.should_trigger() is True
+
+    def test_single_non_correction_no_trigger_after_recent_run(self, tmp_config, stub_llm):
+        _write_n_signals(1, tmp_config)
         orch = Layer2Orchestrator(tmp_config, stub_llm)
         orch._save_last_run_time()
         assert orch.should_trigger() is False

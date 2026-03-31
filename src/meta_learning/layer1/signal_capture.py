@@ -25,14 +25,14 @@ class SignalCapture:
         return signal
 
     def _determine_trigger(self, context: TaskContext) -> TriggerReason | None:
+        if context.user_corrections:
+            return TriggerReason.USER_CORRECTION
+
         if context.errors_fixed and context.errors_encountered:
             return TriggerReason.ERROR_RECOVERY
 
         if context.errors_encountered:
             return TriggerReason.ERROR_RECOVERY
-
-        if context.user_corrections:
-            return TriggerReason.USER_CORRECTION
 
         if context.new_tools:
             return TriggerReason.NEW_TOOL

@@ -86,7 +86,8 @@ class TestMetaLearningConfig:
     def test_defaults(self):
         cfg = MetaLearningConfig()
         assert cfg.layer1.quick_think.max_latency_ms == 50
-        assert cfg.layer2.trigger.min_pending_signals == 5
+        assert cfg.layer2.trigger.min_pending_signals == 2
+        assert cfg.layer2.trigger.max_hours_since_last == 8
         assert cfg.confidence.prune_threshold == 0.3
         assert cfg.llm.provider == "stub"
 

@@ -27,8 +27,8 @@ layer1:
 
 layer2:
   trigger:
-    min_pending_signals: 5
-    max_hours_since_last: 24
+    min_pending_signals: 2
+    max_hours_since_last: 8
   materialize:
     initial_confidence: 0.6
   consolidate:

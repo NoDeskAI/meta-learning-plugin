@@ -119,3 +119,16 @@ class TestSignalCapturePriority:
         signal = capture.evaluate_and_capture(ctx)
         assert signal is not None
         assert signal.trigger_reason == TriggerReason.ERROR_RECOVERY
+
+    def test_user_correction_prioritized_over_error_recovery(self, tmp_config):
+        capture = SignalCapture(tmp_config)
+        ctx = TaskContext(
+            task_description="Fix broken deploy",
+            errors_encountered=["Error: build failed"],
+            errors_fixed=True,
+            user_corrections=["Use the staging branch, not main"],
+            step_count=10,
+        )
+        signal = capture.evaluate_and_capture(ctx)
+        assert signal is not None
+        assert signal.trigger_reason == TriggerReason.USER_CORRECTION

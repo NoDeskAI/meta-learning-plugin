@@ -167,8 +167,8 @@ class Layer1Config(BaseModel):
 
 
 class TriggerConfig(BaseModel):
-    min_pending_signals: int = 5
-    max_hours_since_last: int = 24
+    min_pending_signals: int = 2
+    max_hours_since_last: int = 8
 
 
 class MaterializeConfig(BaseModel):

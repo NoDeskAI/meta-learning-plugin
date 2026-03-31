@@ -206,6 +206,19 @@ class TestCaptureSignal:
             "screenshots/after.png",
         ]
 
+    @pytest.mark.usefixtures("_env")
+    def test_user_correction_includes_action_required(self, workspace: Path):
+        from meta_learning.mcp_server import capture_signal
+
+        result = capture_signal(
+            task_description="Implement feature incorrectly",
+            user_corrections=["No, use the other API endpoint"],
+        )
+        assert "Signal captured" in result
+        assert "user_correction" in result
+        assert "[Action Required]" in result
+        assert "run_layer2" in result
+
 
 # -----------------------------------------------------------------------
 # status

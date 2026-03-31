@@ -50,16 +50,22 @@ class Layer2Orchestrator:
 
     def should_trigger(self) -> bool:
         pending = list_pending_signals(self._config)
+        if not pending:
+            return False
+
+        if any(s.trigger_reason == TriggerReason.USER_CORRECTION for s in pending):
+            return True
+
         if len(pending) >= self._config.layer2.trigger.min_pending_signals:
             return True
 
         last_run = self._load_last_run_time()
         if last_run is None:
-            return len(pending) > 0
+            return True
 
         hours_since = (datetime.now() - last_run).total_seconds() / 3600
         if hours_since >= self._config.layer2.trigger.max_hours_since_last:
-            return len(pending) > 0
+            return True
 
         return False
 
