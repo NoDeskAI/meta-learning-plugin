@@ -19,6 +19,6 @@ abtest/results/
 *.drawio
 .cursor/*
 !.cursor/rules/
-!.cursor/plans/
+.cursor/plans/
 logs/
 uv.lock
