@@ -73,19 +73,19 @@ class TestLayer2Trigger:
     def test_no_trigger_below_threshold_after_recent_run(self, tmp_config, stub_llm):
         _write_n_signals(1, tmp_config)
         orch = Layer2Orchestrator(tmp_config, stub_llm)
-        orch._save_last_run_time()
+        orch._write_state({"status": "completed", "last_run": datetime.now().isoformat()})
         assert orch.should_trigger() is False
 
     def test_triggers_immediately_on_user_correction(self, tmp_config, stub_llm):
         _write_user_correction_signal(tmp_config)
         orch = Layer2Orchestrator(tmp_config, stub_llm)
-        orch._save_last_run_time()
+        orch._write_state({"status": "completed", "last_run": datetime.now().isoformat()})
         assert orch.should_trigger() is True
 
     def test_single_non_correction_no_trigger_after_recent_run(self, tmp_config, stub_llm):
         _write_n_signals(1, tmp_config)
         orch = Layer2Orchestrator(tmp_config, stub_llm)
-        orch._save_last_run_time()
+        orch._write_state({"status": "completed", "last_run": datetime.now().isoformat()})
         assert orch.should_trigger() is False
 
 

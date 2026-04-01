@@ -152,8 +152,6 @@ class Layer2Orchestrator:
             },
         )
 
-        self._save_last_run_time()
-
         result = Layer2Result(
             materialized_count=len(new_experiences),
             total_clusters=len(index.clusters),
@@ -173,6 +171,8 @@ class Layer2Orchestrator:
                 "skill_updates": result.skill_updates,
             },
         )
+
+        self.mark_completed(result)
 
         if result.new_taxonomy_entries > 0:
             self._auto_sync_nobot()
@@ -204,22 +204,57 @@ class Layer2Orchestrator:
     def _state_path(self) -> Path:
         return Path(self._config.signal_buffer_path) / STATE_FILE
 
-    def _load_last_run_time(self) -> datetime | None:
-        state_path = self._state_path()
+    @staticmethod
+    def load_state(config: MetaLearningConfig) -> dict:
+        state_path = Path(config.signal_buffer_path) / STATE_FILE
         if not state_path.exists():
-            return None
+            return {"status": "idle"}
         try:
             with open(state_path) as f:
-                data = json.load(f)
-            return datetime.fromisoformat(data["last_run"])
-        except (json.JSONDecodeError, KeyError, ValueError):
+                return json.load(f)
+        except (json.JSONDecodeError, ValueError):
+            return {"status": "idle"}
+
+    def _load_last_run_time(self) -> datetime | None:
+        data = self.load_state(self._config)
+        lr = data.get("last_run")
+        if lr is None:
+            return None
+        try:
+            return datetime.fromisoformat(lr)
+        except (ValueError, TypeError):
             return None
 
-    def _save_last_run_time(self) -> None:
+    def _write_state(self, data: dict) -> None:
         state_path = self._state_path()
         state_path.parent.mkdir(parents=True, exist_ok=True)
         with open(state_path, "w") as f:
-            json.dump({"last_run": datetime.now().isoformat()}, f)
+            json.dump(data, f, ensure_ascii=False)
+
+    def mark_running(self) -> None:
+        self._write_state({
+            "status": "running",
+            "started_at": datetime.now().isoformat(),
+        })
+
+    def mark_completed(self, result: Layer2Result) -> None:
+        self._write_state({
+            "status": "completed",
+            "last_run": result.timestamp.isoformat(),
+            "completed_at": result.timestamp.isoformat(),
+            "result": {
+                "materialized_count": result.materialized_count,
+                "new_taxonomy_entries": result.new_taxonomy_entries,
+                "skill_updates": result.skill_updates,
+            },
+        })
+
+    def mark_failed(self, error: str) -> None:
+        self._write_state({
+            "status": "failed",
+            "failed_at": datetime.now().isoformat(),
+            "error": error,
+        })
 
 
 class Layer2Result:

@@ -10,6 +10,7 @@ from __future__ import annotations
 
 import logging
 import os
+from datetime import datetime
 from pathlib import Path
 
 from mcp.server.fastmcp import FastMCP
@@ -297,24 +298,27 @@ async def capture_signal(
         import asyncio
 
         async def _run_layer2_background() -> None:
+            bg_orchestrator = Layer2Orchestrator(config, _create_llm(config))
+            bg_orchestrator.mark_running()
             try:
                 bootstrap_multimodal_embedding(config)
-                bg_orchestrator = Layer2Orchestrator(config, _create_llm(config))
                 r = await bg_orchestrator.run_pipeline()
+                bg_orchestrator.mark_completed(r)
                 logger.info(
                     "Background Layer 2 complete: materialized=%d, clusters=%d, "
                     "new_taxonomy=%d, skill_updates=%d",
                     r.materialized_count, r.total_clusters,
                     r.new_taxonomy_entries, r.skill_updates,
                 )
-            except Exception:
+            except Exception as exc:
+                bg_orchestrator.mark_failed(str(exc))
                 logger.exception("Background Layer 2 pipeline failed")
 
         asyncio.create_task(_run_layer2_background())
         result += (
             f"\n\nLayer 2 triggered in background "
             f"({len(pending)} pending signal(s)). "
-            f"You can reply to the user now — learning is happening automatically."
+            f"Learning takes ~1-2 minutes. Call `layer2_status` to check progress."
         )
 
     return result
@@ -349,13 +353,72 @@ async def run_layer2(force: bool = False) -> str:
             f"(pending signals: {len(pending)}). Use force=True to override."
         )
 
-    result = await orchestrator.run_pipeline()
+    orchestrator.mark_running()
+    try:
+        result = await orchestrator.run_pipeline()
+        orchestrator.mark_completed(result)
+    except Exception as exc:
+        orchestrator.mark_failed(str(exc))
+        raise
+
     return (
         f"Layer 2 complete: materialized={result.materialized_count}, "
         f"clusters={result.total_clusters}, "
         f"new_taxonomy={result.new_taxonomy_entries}, "
         f"skill_updates={result.skill_updates}"
     )
+
+
+@mcp.tool()
+def layer2_status() -> str:
+    """Check the current Layer 2 pipeline status.
+
+    Returns whether the pipeline is idle, running, completed, or failed,
+    along with timing and result details. Use this after capture_signal
+    to confirm learning has been applied before relying on new rules.
+    """
+    config = _get_config()
+
+    from meta_learning.layer2.orchestrator import Layer2Orchestrator
+
+    state = Layer2Orchestrator.load_state(config)
+    status = state.get("status", "idle")
+
+    if status == "idle":
+        return "Layer 2: idle (no recent activity)"
+
+    if status == "running":
+        started = state.get("started_at", "unknown")
+        try:
+            elapsed = datetime.now() - datetime.fromisoformat(started)
+            elapsed_s = int(elapsed.total_seconds())
+            return (
+                f"Layer 2: RUNNING (started {elapsed_s}s ago at {started}). "
+                f"SKILL.md has NOT been updated yet — wait for completion."
+            )
+        except (ValueError, TypeError):
+            return "Layer 2: RUNNING. SKILL.md has NOT been updated yet."
+
+    if status == "completed":
+        completed_at = state.get("completed_at", "unknown")
+        res = state.get("result", {})
+        return (
+            f"Layer 2: completed at {completed_at}. "
+            f"Materialized {res.get('materialized_count', 0)} experiences, "
+            f"created {res.get('new_taxonomy_entries', 0)} taxonomy entries, "
+            f"{res.get('skill_updates', 0)} skill updates. "
+            f"SKILL.md is up to date."
+        )
+
+    if status == "failed":
+        failed_at = state.get("failed_at", "unknown")
+        error = state.get("error", "unknown error")
+        return (
+            f"Layer 2: FAILED at {failed_at}. Error: {error}. "
+            f"SKILL.md may be stale. Run `run_layer2(force=True)` to retry."
+        )
+
+    return f"Layer 2: unknown status '{status}'"
 
 
 @mcp.tool()
