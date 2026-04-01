@@ -121,6 +121,7 @@ def _render_skill_md_from_selected(selected: list[TaxonomyEntry]) -> str:
     lines.append("")
     lines.append("## When to call meta-learning tools")
     lines.append("")
+    lines.append("- **SESSION START**: Call `layer2_status` once at the beginning of each session. If status is \"running\", wait briefly and re-check before proceeding — SKILL.md may be stale.")
     lines.append("- **MUST**: When the user corrects, disagrees with, or redirects your approach, IMMEDIATELY call `capture_signal` with `user_corrections` set to the user's exact feedback. Just saying \"understood\" is NOT enough — you must also call the tool. Learning consolidation runs automatically in the background.")
     lines.append("- Before risky or repetitive actions, call `quick_think` to get detailed guidance.")
     lines.append("")
