@@ -18,9 +18,62 @@ from meta_learning.shared.models import (
     ExperienceCluster,
     MetaLearningConfig,
     TaxonomyEntry,
+    TaxonomyExtraction,
 )
 
 logger = logging.getLogger(__name__)
+
+_STRIP_CHARS = ".:,;()[]{}\"'`<>!?/\\#@$%^&*+=~|"
+
+_SIMILARITY_STOPWORDS = frozenset({
+    "the", "a", "an", "is", "of", "to", "in", "for", "and", "or", "not",
+    "it", "this", "that", "with", "from", "are", "was", "were", "been",
+    "be", "has", "have", "had", "but", "if", "its", "can", "does", "do",
+    "did", "will", "would", "should", "could", "may", "might", "on", "no",
+})
+
+
+def _tokenize(text: str) -> set[str]:
+    tokens: set[str] = set()
+    for raw in text.lower().split():
+        cleaned = raw.strip(_STRIP_CHARS)
+        if cleaned and len(cleaned) > 1 and cleaned not in _SIMILARITY_STOPWORDS:
+            tokens.add(cleaned)
+    return tokens
+
+
+def _entry_text_similarity(
+    new_name: str, new_prevention: str, new_trigger: str,
+    existing: TaxonomyEntry,
+) -> float:
+    text_new = f"{new_name} {new_prevention} {new_trigger}"
+    text_old = f"{existing.name} {existing.prevention} {existing.trigger}"
+    tokens_new = _tokenize(text_new)
+    tokens_old = _tokenize(text_old)
+    if not tokens_new or not tokens_old:
+        return 0.0
+    return len(tokens_new & tokens_old) / min(len(tokens_new), len(tokens_old))
+
+
+MERGE_SIMILARITY_THRESHOLD = 0.7
+
+
+def _merge_into_existing(
+    existing: TaxonomyEntry,
+    extraction: TaxonomyExtraction,
+    new_experiences: list[Experience],
+) -> None:
+    new_exp_ids = [e.id for e in new_experiences]
+    for eid in new_exp_ids:
+        if eid not in existing.source_exps:
+            existing.source_exps.append(eid)
+    for kw in extraction.keywords:
+        if kw not in existing.keywords:
+            existing.keywords.append(kw)
+    existing.confidence = min(
+        existing.confidence + 0.05 * len(new_experiences), 1.0
+    )
+    existing.last_verified = date.today()
 
 
 class TaxonomyBuilder:
@@ -35,6 +88,7 @@ class TaxonomyBuilder:
             return []
 
         taxonomy = load_error_taxonomy(self._config)
+        all_existing = taxonomy.all_entries()
         new_entries: list[TaxonomyEntry] = []
 
         for cluster in clusters:
@@ -46,8 +100,30 @@ class TaxonomyBuilder:
             if old_tax_id:
                 logger.info("Refreshing stale taxonomy entry %s", old_tax_id)
                 taxonomy.remove_entry(old_tax_id)
+                all_existing = [e for e in all_existing if e.id != old_tax_id]
 
             extraction = await self._llm.extract_taxonomy(experiences)
+
+            best_match: TaxonomyEntry | None = None
+            best_sim = 0.0
+            for entry in all_existing:
+                sim = _entry_text_similarity(
+                    extraction.name, extraction.prevention, extraction.trigger,
+                    entry,
+                )
+                if sim > best_sim:
+                    best_sim = sim
+                    best_match = entry
+
+            if best_match is not None and best_sim >= MERGE_SIMILARITY_THRESHOLD:
+                logger.info(
+                    "Merging into existing taxonomy %s (similarity=%.2f)",
+                    best_match.id, best_sim,
+                )
+                _merge_into_existing(best_match, extraction, experiences)
+                self._mark_experiences_promoted(experiences, best_match.id)
+                self._mark_cluster_promoted(cluster, best_match.id)
+                continue
 
             domain = cluster.task_type.value
             subdomain = _infer_subdomain(experiences)
@@ -69,6 +145,7 @@ class TaxonomyBuilder:
             )
 
             taxonomy.add_entry(domain, subdomain, entry)
+            all_existing.append(entry)
             new_entries.append(entry)
 
             self._mark_experiences_promoted(experiences, entry_id)

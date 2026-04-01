@@ -81,6 +81,7 @@ class TestTaxonomyBuilder:
         cluster_small, _ = _make_cluster_with_experiences(tmp_config, 3)
         builder = TaxonomyBuilder(tmp_config, stub_llm)
         entries_small = await builder.build_from_clusters([cluster_small])
+        original_confidence = entries_small[0].confidence
 
         pool_dir = Path(tmp_config.experience_pool_path)
         for p in pool_dir.rglob("exp-*.yaml"):
@@ -88,6 +89,8 @@ class TestTaxonomyBuilder:
 
         cluster_large, _ = _make_cluster_with_experiences(tmp_config, 6)
         cluster_large.cluster_id = "clust-002"
-        entries_large = await builder.build_from_clusters([cluster_large])
+        await builder.build_from_clusters([cluster_large])
 
-        assert entries_large[0].confidence >= entries_small[0].confidence
+        tax = load_error_taxonomy(tmp_config)
+        merged_entry = tax.all_entries()[0]
+        assert merged_entry.confidence >= original_confidence
