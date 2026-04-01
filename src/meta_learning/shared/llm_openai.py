@@ -32,6 +32,7 @@ from meta_learning.shared.models import (
     TaskType,
     TaxonomyEntry,
     TaxonomyExtraction,
+    TriggerReason,
 )
 
 logger = logging.getLogger(__name__)
@@ -167,7 +168,40 @@ ANALYSIS GUIDELINES:
    - Professional documents: requirement coverage, domain standard adherence, formatting conventions, data accuracy, citation quality.
    - Coding/DevOps: testing discipline, dependency management, error handling, edge case coverage.
 """
-        user = f"""Signal ID: {signal.signal_id}
+        if (
+            signal.trigger_reason == TriggerReason.USER_CORRECTION
+            and signal.user_feedback
+        ):
+            system += """
+
+CRITICAL — USER CORRECTION MODE:
+This signal was triggered because the user corrected the agent. Switch from
+failure-analysis mode to INSTRUCTION EXTRACTION mode:
+
+1. The user's feedback is the GROUND TRUTH — do not reinterpret it.
+2. resolution MUST use the user's exact terminology and action verbs.
+   Example: if user said "先备份" → resolution = "backup the file before modifying",
+   NOT "verify the file state" or "read existing content".
+3. If user_feedback contains a specific directive (path, command, sequence),
+   preserve it verbatim in resolution.
+4. If user_feedback is vague (e.g. just "不对"), use session context to infer
+   what was wrong, but anchor resolution on the user's implied intent.
+5. meta_insight = a directly executable rule from the user's words.
+   Do NOT generalize a specific user preference into abstract advice.
+"""
+        if signal.trigger_reason == TriggerReason.USER_CORRECTION:
+            user = f"""**User correction (GROUND TRUTH):** {signal.user_feedback or 'N/A'}
+
+Signal ID: {signal.signal_id}
+Task: {signal.task_summary}
+Keywords: {', '.join(signal.keywords)}
+Error: {signal.error_snapshot or 'N/A'}
+Resolution: {signal.resolution_snapshot or 'N/A'}
+
+Session context:
+{session_context[:6000]}"""
+        else:
+            user = f"""Signal ID: {signal.signal_id}
 Trigger: {signal.trigger_reason}
 Task: {signal.task_summary}
 Keywords: {', '.join(signal.keywords)}
@@ -270,6 +304,16 @@ IMPORTANT:
             for e in experiences[:10]
         )
         user = f"Experiences ({len(experiences)} total):\n{exp_summaries}"
+
+        if len(experiences) == 1:
+            system += """
+
+SINGLE EXPERIENCE — PRESERVE SPECIFICS:
+There is only ONE experience. Preserve its resolution and meta_insight as closely
+as possible in fix_sop and prevention. Do NOT over-generalize a single data point.
+If the resolution contains a specific action verb (e.g. "backup", "create under X"),
+it MUST appear in prevention.
+"""
 
         try:
             data = await self._chat_json(system, user)
