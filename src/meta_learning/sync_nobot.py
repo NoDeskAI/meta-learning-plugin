@@ -24,6 +24,65 @@ CATEGORY_KEYWORD_MAP: dict[str, set[str]] = {
     "verification": {"verify", "check", "test", "backup", "validate", "assert", "confirm"},
 }
 
+_RENDER_STOPWORDS = frozenset({
+    "the", "a", "an", "is", "of", "to", "in", "for", "and", "or", "not",
+    "it", "this", "that", "with", "from", "are", "was", "were", "been",
+    "be", "has", "have", "had", "but", "if", "its", "can", "does", "do",
+    "did", "will", "would", "should", "could", "may", "might", "on", "no",
+    "always", "never", "before", "after", "using", "use", "any", "all",
+})
+_STRIP_CHARS = ".:,;()[]{}\"'`<>!?/\\#@$%^&*+=~|"
+
+RENDER_DEDUP_THRESHOLD = 0.6
+
+
+def _tokenize_text(text: str) -> set[str]:
+    tokens: set[str] = set()
+    for raw in text.lower().split():
+        cleaned = raw.strip(_STRIP_CHARS)
+        if cleaned and len(cleaned) > 1 and cleaned not in _RENDER_STOPWORDS:
+            tokens.add(cleaned)
+    return tokens
+
+
+def _entry_topic_tokens(entry: TaxonomyEntry) -> set[str]:
+    kw_text = " ".join(entry.keywords)
+    combined = f"{entry.name} {kw_text}"
+    combined = combined.replace("_", " ").replace("-", " ")
+    return _tokenize_text(combined)
+
+
+def _select_diverse_top_n(
+    entries: list[TaxonomyEntry], max_rules: int,
+) -> list[TaxonomyEntry]:
+    """Greedy selection: pick highest-confidence entries, skipping near-duplicates.
+
+    Uses keyword + name overlap (topic-level) to detect duplicates rather than
+    full prevention text, since keywords are curated topic indicators.
+    """
+    sorted_entries = sorted(entries, key=lambda e: e.confidence, reverse=True)
+    selected: list[TaxonomyEntry] = []
+    selected_tokens: list[set[str]] = []
+
+    for entry in sorted_entries:
+        if len(selected) >= max_rules:
+            break
+        tokens = _entry_topic_tokens(entry)
+        if not tokens:
+            continue
+        is_dup = False
+        for prev_tokens in selected_tokens:
+            overlap = len(tokens & prev_tokens)
+            smaller = min(len(tokens), len(prev_tokens))
+            if smaller > 0 and overlap / smaller >= RENDER_DEDUP_THRESHOLD:
+                is_dup = True
+                break
+        if not is_dup:
+            selected.append(entry)
+            selected_tokens.append(tokens)
+
+    return selected
+
 
 def _classify_entry(entry: TaxonomyEntry) -> str:
     kw_set = {k.lower() for k in entry.keywords}
@@ -41,9 +100,11 @@ def _classify_entry(entry: TaxonomyEntry) -> str:
 
 
 def _render_skill_md(entries: list[TaxonomyEntry], max_rules: int = 10) -> str:
-    sorted_entries = sorted(entries, key=lambda e: e.confidence, reverse=True)
-    top = sorted_entries[:max_rules]
+    top = _select_diverse_top_n(entries, max_rules)
+    return _render_skill_md_from_selected(top)
 
+
+def _render_skill_md_from_selected(selected: list[TaxonomyEntry]) -> str:
     lines = [
         "---",
         "name: meta-learning",
@@ -54,7 +115,7 @@ def _render_skill_md(entries: list[TaxonomyEntry], max_rules: int = 10) -> str:
         "",
         "You have learned the following rules from past interactions:",
     ]
-    for entry in top:
+    for entry in selected:
         lines.append(f"- {entry.prevention}")
 
     lines.append("")
@@ -119,12 +180,14 @@ def sync_taxonomy_to_nobot_workspace(
     meta_dir.mkdir(parents=True, exist_ok=True)
     rules_dir.mkdir(parents=True, exist_ok=True)
 
-    skill_md = _render_skill_md(entries, max_rules=max_always_rules)
+    diverse_top = _select_diverse_top_n(entries, max_always_rules)
+    skill_md = _render_skill_md_from_selected(diverse_top)
     skill_path = meta_dir / "SKILL.md"
     skill_path.write_text(skill_md, encoding="utf-8")
     result.skill_md_path = str(skill_path)
-    result.top_n_in_skill = min(len(entries), max_always_rules)
-    logger.info("Wrote SKILL.md with top-%d rules at %s", result.top_n_in_skill, skill_path)
+    result.top_n_in_skill = len(diverse_top)
+    logger.info("Wrote SKILL.md with %d diverse rules (from %d total) at %s",
+                result.top_n_in_skill, len(entries), skill_path)
 
     categorized: dict[str, list[TaxonomyEntry]] = {}
     for entry in entries:
