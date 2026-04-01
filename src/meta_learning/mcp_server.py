@@ -576,5 +576,9 @@ def risk_assessment(task_description: str) -> str:
 # Entry point
 # ---------------------------------------------------------------------------
 
-if __name__ == "__main__":
+def main() -> None:
     mcp.run()
+
+
+if __name__ == "__main__":
+    main()

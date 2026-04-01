@@ -1,5 +1,6 @@
-# 开发/通用模板配置 — DeskClaw 用户请使用 config.deskclaw.yaml
-# 路径可通过 env META_LEARNING_WORKSPACE / META_LEARNING_SESSIONS_ROOT 覆盖
+# DeskClaw / Nobot 专用配置模板
+# install.sh 会将此文件复制到 ~/.deskclaw/nanobot/workspace/meta-learning-data/config.yaml
+
 workspace_root: "~/.deskclaw/nanobot/workspace/meta-learning-data"
 sessions_root: "~/.deskclaw/nanobot/workspace/sessions"
 

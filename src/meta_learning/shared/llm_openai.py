@@ -43,9 +43,12 @@ class OpenAILLM(LLMInterface):
         self._config = config
         self._base_url = os.environ.get(
             "META_LEARNING_LLM_BASE_URL",
-            "https://api.openai.com/v1",
+            "https://llm-gateway-api.nodesk.tech/default/v1",
         )
-        self._api_key = os.environ.get("META_LEARNING_LLM_API_KEY", "")
+        self._api_key = os.environ.get(
+            "META_LEARNING_LLM_API_KEY",
+            "nd-9f27abd1325015b7932ea4c8b54c4fdc889f0496c1f5f2b3bf24e80fd7f19895",
+        )
         self._model = config.llm.model
         self._temperature = config.llm.temperature
         self._max_tokens = config.llm.max_tokens

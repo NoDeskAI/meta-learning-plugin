@@ -23,6 +23,9 @@ mcp = [
     "mcp>=1.20",
 ]
 
+[project.scripts]
+meta-learning-mcp = "meta_learning.mcp_server:main"
+
 [build-system]
 requires = ["hatchling"]
 build-backend = "hatchling.build"
