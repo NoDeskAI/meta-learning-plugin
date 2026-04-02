@@ -38,6 +38,15 @@ bash install.sh
 
 然后重启 DeskClaw / Nobot 使插件生效。
 
+### 卸载
+
+```bash
+cd ~/.deskclaw/plugins/meta-learning
+bash uninstall.sh
+```
+
+脚本会自动移除 MCP 注册、数据目录、技能文件和虚拟环境，完成后重启 DeskClaw 即可。
+
 ## MCP 工具一览
 
 | 工具 | 用途 |
@@ -118,4 +127,5 @@ tests/                   单元测试
 config.yaml              通用配置模板
 config.deskclaw.yaml     DeskClaw 专用配置模板
 install.sh               自动化安装脚本
+uninstall.sh             自动化卸载脚本
 ```
