@@ -21,9 +21,7 @@ from meta_learning.shared.io import (
     write_experience,
     write_signal,
 )
-from meta_learning.shared.models import (
-    ExperienceIndex,
-)
+from meta_learning.shared.models import ExperienceIndex
 
 
 class TestConfigLoading:

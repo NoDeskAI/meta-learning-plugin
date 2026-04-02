@@ -20,6 +20,7 @@ from meta_learning.shared.models import (
     CapabilityAnalysis,
     ConsolidateJudgment,
     CrossTaskAnalysis,
+    TriggerReason,
     Experience,
     MaterializeResult,
     MemoryAction,
@@ -32,7 +33,6 @@ from meta_learning.shared.models import (
     TaskType,
     TaxonomyEntry,
     TaxonomyExtraction,
-    TriggerReason,
 )
 
 logger = logging.getLogger(__name__)

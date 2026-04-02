@@ -13,8 +13,9 @@ def _env_or(env_key: str, default: str) -> str:
 
 
 class TriggerReason(StrEnum):
-    ERROR_RECOVERY = "error_recovery"
     USER_CORRECTION = "user_correction"
+    SELF_RECOVERY = "self_recovery"
+    UNRESOLVED_ERROR = "unresolved_error"
     NEW_TOOL = "new_tool"
     EFFICIENCY_ANOMALY = "efficiency_anomaly"
 

@@ -26,10 +26,12 @@ signal:
     trigger_reason:
       type: string
       enum:
-        - error_recovery
         - user_correction
+        - self_recovery
+        - unresolved_error
         - new_tool
         - efficiency_anomaly
+      description: "Why this signal was captured"
     keywords:
       type: array
       items:
@@ -41,7 +43,7 @@ signal:
     error_snapshot:
       type: string
       nullable: true
-      description: "Populated only when trigger_reason is error_recovery"
+      description: "Populated when trigger_reason is self_recovery or unresolved_error"
     resolution_snapshot:
       type: string
       nullable: true

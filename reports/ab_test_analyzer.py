@@ -3,11 +3,11 @@
 
 Loads all signals from signal_buffer, groups by experiment_group,
 and computes per-group metrics:
-  - repeat_error_rate: fraction of error_recovery signals whose keywords
-    overlap with at least one earlier signal in the same group
+  - repeat_error_rate: fraction of error-related signals (trigger_reason is
+    self_recovery or unresolved_error) whose keywords overlap with at least
+    one earlier signal in the same group
   - task_success_rate: fraction of signals where errors were encountered
-    AND subsequently fixed (trigger_reason != efficiency_anomaly and
-    error_snapshot is present implies error path; no error_snapshot implies success)
+    AND subsequently fixed (trigger_reason indicates error path)
 
 Usage:
     python -m reports.ab_test_analyzer --workspace ~/.openclaw/workspace
@@ -45,7 +45,10 @@ def group_signals(signals: list[dict]) -> dict[str, list[dict]]:
 
 
 def compute_repeat_error_rate(signals: list[dict]) -> float:
-    error_signals = [s for s in signals if s.get("trigger_reason") == "error_recovery"]
+    error_signals = [
+        s for s in signals
+        if s.get("trigger_reason") in ("unresolved_error", "self_recovery")
+    ]
     if len(error_signals) < 2:
         return 0.0
 
@@ -80,13 +83,13 @@ def compute_task_success_rate(signals: list[dict]) -> float:
 
     success_count = 0
     for sig in signals:
-        trigger = sig.get("trigger_reason", "")
+        reason = sig.get("trigger_reason", "")
         has_error = sig.get("error_snapshot") is not None
-        if trigger == "error_recovery" and has_error:
+        if reason in ("self_recovery", "unresolved_error") and has_error:
             success_count += 1
-        elif trigger in ("user_correction", "new_tool"):
+        elif reason in ("user_correction", "new_tool"):
             success_count += 1
-        elif trigger == "efficiency_anomaly":
+        elif reason == "efficiency_anomaly":
             pass
 
     return success_count / len(signals)
@@ -102,7 +105,8 @@ def format_report(grouped: dict[str, list[dict]]) -> str:
         repeat_rate = compute_repeat_error_rate(signals)
         success_rate = compute_task_success_rate(signals)
         error_count = sum(
-            1 for s in signals if s.get("trigger_reason") == "error_recovery"
+            1 for s in signals
+            if s.get("trigger_reason") in ("unresolved_error", "self_recovery")
         )
 
         lines.append("")

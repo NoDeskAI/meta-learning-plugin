@@ -20,7 +20,7 @@ def openai_llm(tmp_config: MetaLearningConfig) -> OpenAILLM:
     return OpenAILLM(tmp_config)
 
 
-def _make_signal(trigger, user_feedback=None):
+def _make_signal(trigger: TriggerReason, user_feedback=None):
     return Signal(
         signal_id="sig-test-001",
         timestamp=datetime.now(),
@@ -86,7 +86,7 @@ class TestMaterializePromptDifferentiation:
 
     @pytest.mark.asyncio
     async def test_non_correction_uses_standard_prompt(self, openai_llm):
-        signal = _make_signal(TriggerReason.ERROR_RECOVERY, user_feedback=None)
+        signal = _make_signal(TriggerReason.SELF_RECOVERY, user_feedback=None)
         captured = {}
 
         async def mock_chat_json(system, user):

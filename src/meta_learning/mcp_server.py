@@ -234,9 +234,10 @@ async def capture_signal(
 ) -> str:
     """Record a learning signal after completing a task.
 
-    Analyzes the task outcome and, if a meaningful learning trigger is found
-    (error recovery, user correction, new tool, efficiency anomaly), writes a
-    YAML signal file to signal_buffer/ for later Layer 2 processing.
+    Analyzes the task outcome and, if meaningful learning triggers are found
+    (self-recovery, unresolved error, user correction, new tool, efficiency
+    anomaly), writes a YAML signal file to signal_buffer/ for later Layer 2
+    processing.
 
     If Layer 2 trigger conditions are met, the consolidation pipeline runs
     automatically in the background — no need to call run_layer2 separately.
@@ -286,7 +287,7 @@ async def capture_signal(
 
     result = (
         f"Signal captured: [{signal.signal_id}] "
-        f"trigger={signal.trigger_reason.value}, "
+        f"trigger={signal.trigger_reason}, "
         f"file={config.signal_buffer_path}/{signal.signal_id}.yaml"
     )
 
@@ -498,7 +499,7 @@ def status() -> str:
         lines.append("\nRecent pending signals:")
         for sig in pending_signals[-5:]:
             lines.append(
-                f"  [{sig.signal_id}] {sig.trigger_reason}: "
+                f"  [{sig.signal_id}] [trigger={sig.trigger_reason}]: "
                 f"{sig.task_summary[:60]}"
             )
 

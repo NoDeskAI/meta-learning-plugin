@@ -51,7 +51,7 @@ class TestMaterialize:
                 timestamp=datetime.now(),
                 session_id=session_id,
                 memory_date=date(2026, 3, 9),
-                trigger_reason=TriggerReason.ERROR_RECOVERY,
+                trigger_reason=TriggerReason.SELF_RECOVERY,
                 keywords=["error"],
                 task_summary=f"Fix coding error #{i}",
                 error_snapshot=f"Error #{i}",

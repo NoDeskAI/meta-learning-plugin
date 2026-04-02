@@ -371,7 +371,7 @@ async def main() -> None:
             captured_signals.append(signal)
             print(
                 f"  [CAPTURED] {signal.signal_id}  "
-                f"trigger={signal.trigger_reason.value:20s}  "
+                f"trigger={signal.trigger_reason}  "
                 f"keywords={signal.keywords[:5]}"
             )
         else:

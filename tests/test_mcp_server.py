@@ -146,7 +146,7 @@ class TestCaptureSignal:
             step_count=5,
         )
         assert "Signal captured" in result
-        assert "error_recovery" in result
+        assert "self_recovery" in result
 
         sig_files = list((workspace / "signal_buffer").glob("sig-*.yaml"))
         assert len(sig_files) == 1

@@ -80,8 +80,9 @@ Layer 3（离线深度学习，手动触发）
 
 | 触发类型 | 说明 |
 |---------|------|
-| `error_recovery` | Agent 遇到错误并自行恢复 |
-| `user_correction` | 用户纠正了 Agent 的行为（最高价值信号） |
+| `user_correction` | 用户纠正了 Agent 的行为（最高优先级信号） |
+| `unresolved_error` | Agent 遇到错误但未解决（高学习价值） |
+| `self_recovery` | Agent 遇到错误并自行恢复 |
 | `new_tool` | Agent 首次使用某个工具 |
 | `efficiency_anomaly` | 步骤数显著超过平均值 |
 

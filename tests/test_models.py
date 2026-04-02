@@ -19,7 +19,7 @@ class TestSignalModel:
             signal_id="sig-20260309-001",
             timestamp=datetime.now(),
             session_id="abc",
-            trigger_reason=TriggerReason.ERROR_RECOVERY,
+            trigger_reason=TriggerReason.SELF_RECOVERY,
             keywords=["error"],
             task_summary="test",
             step_count=1,
@@ -28,8 +28,9 @@ class TestSignalModel:
         assert sig.error_snapshot is None
 
     def test_trigger_reason_values(self):
-        assert TriggerReason.ERROR_RECOVERY == "error_recovery"
         assert TriggerReason.USER_CORRECTION == "user_correction"
+        assert TriggerReason.SELF_RECOVERY == "self_recovery"
+        assert TriggerReason.UNRESOLVED_ERROR == "unresolved_error"
         assert TriggerReason.NEW_TOOL == "new_tool"
         assert TriggerReason.EFFICIENCY_ANOMALY == "efficiency_anomaly"
 

@@ -620,7 +620,7 @@ def _capture_correction_signal(
         return None
     logger.info(
         "  Signal capture: [%s] trigger=%s",
-        signal.signal_id, signal.trigger_reason.value,
+        signal.signal_id, signal.trigger_reason,
     )
     return signal
 

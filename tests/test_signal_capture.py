@@ -8,7 +8,7 @@ from meta_learning.shared.models import (
 
 
 class TestSignalCaptureTriggering:
-    def test_error_recovery_trigger(self, tmp_config):
+    def test_self_recovery_trigger(self, tmp_config):
         capture = SignalCapture(tmp_config)
         ctx = TaskContext(
             task_description="Fix TypeScript error",
@@ -19,8 +19,21 @@ class TestSignalCaptureTriggering:
         )
         signal = capture.evaluate_and_capture(ctx)
         assert signal is not None
-        assert signal.trigger_reason == TriggerReason.ERROR_RECOVERY
+        assert signal.trigger_reason == TriggerReason.SELF_RECOVERY
         assert signal.error_snapshot is not None
+
+    def test_unresolved_error_trigger(self, tmp_config):
+        capture = SignalCapture(tmp_config)
+        ctx = TaskContext(
+            task_description="Fix TypeScript error",
+            errors_encountered=["TS2345: type mismatch"],
+            errors_fixed=False,
+            step_count=5,
+            session_id="sess-001",
+        )
+        signal = capture.evaluate_and_capture(ctx)
+        assert signal is not None
+        assert signal.trigger_reason == TriggerReason.UNRESOLVED_ERROR
 
     def test_user_correction_trigger(self, tmp_config):
         capture = SignalCapture(tmp_config)
@@ -108,19 +121,7 @@ class TestSignalCaptureKeywordExtraction:
 
 
 class TestSignalCapturePriority:
-    def test_error_recovery_prioritized_over_anomaly(self, tmp_config):
-        capture = SignalCapture(tmp_config)
-        ctx = TaskContext(
-            task_description="Complex task",
-            errors_encountered=["Error: something broke"],
-            errors_fixed=True,
-            step_count=50,
-        )
-        signal = capture.evaluate_and_capture(ctx)
-        assert signal is not None
-        assert signal.trigger_reason == TriggerReason.ERROR_RECOVERY
-
-    def test_user_correction_prioritized_over_error_recovery(self, tmp_config):
+    def test_user_correction_wins_over_self_recovery(self, tmp_config):
         capture = SignalCapture(tmp_config)
         ctx = TaskContext(
             task_description="Fix broken deploy",

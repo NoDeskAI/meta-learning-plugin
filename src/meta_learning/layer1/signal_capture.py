@@ -27,21 +27,17 @@ class SignalCapture:
     def _determine_trigger(self, context: TaskContext) -> TriggerReason | None:
         if context.user_corrections:
             return TriggerReason.USER_CORRECTION
-
-        if context.errors_fixed and context.errors_encountered:
-            return TriggerReason.ERROR_RECOVERY
-
         if context.errors_encountered:
-            return TriggerReason.ERROR_RECOVERY
-
+            if context.errors_fixed:
+                return TriggerReason.SELF_RECOVERY
+            else:
+                return TriggerReason.UNRESOLVED_ERROR
         if context.new_tools:
             return TriggerReason.NEW_TOOL
-
         threshold = self._config.layer1.signal_capture.efficiency_anomaly_threshold
         avg = self._config.layer1.signal_capture.average_step_count
         if context.step_count > avg * threshold:
             return TriggerReason.EFFICIENCY_ANOMALY
-
         return None
 
     def _build_signal(self, context: TaskContext, trigger: TriggerReason) -> Signal:
