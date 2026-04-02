@@ -5,7 +5,7 @@ import pytest
 
 from meta_learning.layer2.materialize import Materializer
 from meta_learning.shared.io import list_pending_signals, write_signal
-from meta_learning.shared.models import Signal, TriggerReason
+from meta_learning.shared.models import DetectionChannel, Signal
 
 _MOCK_SESSION = '{"role":"user","content":"fix it"}\n{"role":"assistant","content":"done"}\n'
 
@@ -51,7 +51,8 @@ class TestMaterialize:
                 timestamp=datetime.now(),
                 session_id=session_id,
                 memory_date=date(2026, 3, 9),
-                trigger_reason=TriggerReason.ERROR_RECOVERY,
+                detection_channels=[DetectionChannel.SELF_RECOVERY],
+                primary_channel=DetectionChannel.SELF_RECOVERY,
                 keywords=["error"],
                 task_summary=f"Fix coding error #{i}",
                 error_snapshot=f"Error #{i}",

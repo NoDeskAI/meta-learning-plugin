@@ -21,9 +21,7 @@ from meta_learning.shared.io import (
     write_experience,
     write_signal,
 )
-from meta_learning.shared.models import (
-    ExperienceIndex,
-)
+from meta_learning.shared.models import ExperienceIndex
 
 
 class TestConfigLoading:
@@ -49,7 +47,8 @@ class TestSignalIO:
         assert path.exists()
         loaded = read_signal(path)
         assert loaded.signal_id == sample_signal.signal_id
-        assert loaded.trigger_reason == sample_signal.trigger_reason
+        assert loaded.detection_channels == sample_signal.detection_channels
+        assert loaded.primary_channel == sample_signal.primary_channel
 
     def test_list_pending_empty(self, tmp_config):
         assert list_pending_signals(tmp_config) == []
