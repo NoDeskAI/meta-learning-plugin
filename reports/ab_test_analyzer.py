@@ -3,12 +3,11 @@
 
 Loads all signals from signal_buffer, groups by experiment_group,
 and computes per-group metrics:
-  - repeat_error_rate: fraction of error-related signals (self_recovery or
-    unresolved_error in detection_channels) whose keywords overlap with at
-    least one earlier signal in the same group
+  - repeat_error_rate: fraction of error-related signals (trigger_reason is
+    self_recovery or unresolved_error) whose keywords overlap with at least
+    one earlier signal in the same group
   - task_success_rate: fraction of signals where errors were encountered
-    AND subsequently fixed (detection_channels contain error-related channels
-    and error_snapshot is present implies error path)
+    AND subsequently fixed (trigger_reason indicates error path)
 
 Usage:
     python -m reports.ab_test_analyzer --workspace ~/.openclaw/workspace
@@ -48,8 +47,7 @@ def group_signals(signals: list[dict]) -> dict[str, list[dict]]:
 def compute_repeat_error_rate(signals: list[dict]) -> float:
     error_signals = [
         s for s in signals
-        if "unresolved_error" in (s.get("detection_channels") or [])
-        or "self_recovery" in (s.get("detection_channels") or [])
+        if s.get("trigger_reason") in ("unresolved_error", "self_recovery")
     ]
     if len(error_signals) < 2:
         return 0.0
@@ -85,13 +83,13 @@ def compute_task_success_rate(signals: list[dict]) -> float:
 
     success_count = 0
     for sig in signals:
-        channels = sig.get("detection_channels") or []
+        reason = sig.get("trigger_reason", "")
         has_error = sig.get("error_snapshot") is not None
-        if ("self_recovery" in channels or "unresolved_error" in channels) and has_error:
+        if reason in ("self_recovery", "unresolved_error") and has_error:
             success_count += 1
-        elif "user_correction" in channels or "new_tool" in channels:
+        elif reason in ("user_correction", "new_tool"):
             success_count += 1
-        elif "efficiency_anomaly" in channels:
+        elif reason == "efficiency_anomaly":
             pass
 
     return success_count / len(signals)
@@ -108,8 +106,7 @@ def format_report(grouped: dict[str, list[dict]]) -> str:
         success_rate = compute_task_success_rate(signals)
         error_count = sum(
             1 for s in signals
-            if "unresolved_error" in (s.get("detection_channels") or [])
-            or "self_recovery" in (s.get("detection_channels") or [])
+            if s.get("trigger_reason") in ("unresolved_error", "self_recovery")
         )
 
         lines.append("")

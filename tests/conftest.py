@@ -7,7 +7,6 @@ import pytest
 
 from meta_learning.shared.llm import StubLLM
 from meta_learning.shared.models import (
-    DetectionChannel,
     ErrorTaxonomy,
     Experience,
     MetaLearningConfig,
@@ -15,6 +14,7 @@ from meta_learning.shared.models import (
     TaskContext,
     TaskType,
     TaxonomyEntry,
+    TriggerReason,
 )
 
 
@@ -45,8 +45,7 @@ def sample_signal() -> Signal:
         timestamp=datetime(2026, 3, 9, 14, 30),
         session_id="test-session-001",
         memory_date=date(2026, 3, 9),
-        detection_channels=[DetectionChannel.SELF_RECOVERY],
-        primary_channel=DetectionChannel.SELF_RECOVERY,
+        trigger_reason=TriggerReason.SELF_RECOVERY,
         keywords=["TS2345", "generic", "type inference"],
         task_summary="Fix React component TypeScript type error",
         error_snapshot="TS2345: Argument of type X is not assignable",

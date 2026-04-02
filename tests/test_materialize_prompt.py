@@ -9,9 +9,9 @@ import pytest
 
 from meta_learning.shared.llm_openai import OpenAILLM
 from meta_learning.shared.models import (
-    DetectionChannel,
     MetaLearningConfig,
     Signal,
+    TriggerReason,
 )
 
 
@@ -20,14 +20,13 @@ def openai_llm(tmp_config: MetaLearningConfig) -> OpenAILLM:
     return OpenAILLM(tmp_config)
 
 
-def _make_signal(channels: list[DetectionChannel], user_feedback=None):
+def _make_signal(trigger: TriggerReason, user_feedback=None):
     return Signal(
         signal_id="sig-test-001",
         timestamp=datetime.now(),
         session_id="session-test",
         memory_date=date(2026, 4, 1),
-        detection_channels=channels,
-        primary_channel=channels[0],
+        trigger_reason=trigger,
         keywords=["env", "backup"],
         task_summary="Modify .env configuration file",
         error_snapshot=None,
@@ -42,7 +41,7 @@ class TestMaterializePromptDifferentiation:
     @pytest.mark.asyncio
     async def test_user_correction_appends_extraction_mode(self, openai_llm):
         signal = _make_signal(
-            [DetectionChannel.USER_CORRECTION],
+            TriggerReason.USER_CORRECTION,
             user_feedback="should backup first",
         )
         captured = {}
@@ -65,7 +64,7 @@ class TestMaterializePromptDifferentiation:
     @pytest.mark.asyncio
     async def test_user_correction_reorders_user_message(self, openai_llm):
         signal = _make_signal(
-            [DetectionChannel.USER_CORRECTION],
+            TriggerReason.USER_CORRECTION,
             user_feedback="should backup first",
         )
         captured = {}
@@ -87,7 +86,7 @@ class TestMaterializePromptDifferentiation:
 
     @pytest.mark.asyncio
     async def test_non_correction_uses_standard_prompt(self, openai_llm):
-        signal = _make_signal([DetectionChannel.SELF_RECOVERY], user_feedback=None)
+        signal = _make_signal(TriggerReason.SELF_RECOVERY, user_feedback=None)
         captured = {}
 
         async def mock_chat_json(system, user):
@@ -102,11 +101,11 @@ class TestMaterializePromptDifferentiation:
             await openai_llm.materialize_signal(signal, "ctx")
 
         assert "USER CORRECTION MODE" not in captured["system"]
-        assert "Channels:" in captured["user"]
+        assert "Trigger:" in captured["user"]
 
     @pytest.mark.asyncio
     async def test_user_correction_without_feedback_no_extraction_mode(self, openai_llm):
-        signal = _make_signal([DetectionChannel.USER_CORRECTION], user_feedback=None)
+        signal = _make_signal(TriggerReason.USER_CORRECTION, user_feedback=None)
         captured = {}
 
         async def mock_chat_json(system, user):

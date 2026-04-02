@@ -13,9 +13,9 @@ from meta_learning.layer2.taxonomy import TaxonomyBuilder
 from meta_learning.shared.io import list_pending_signals
 from meta_learning.shared.llm import LLMInterface
 from meta_learning.shared.models import (
-    DetectionChannel,
     ExperienceCluster,
     MetaLearningConfig,
+    TriggerReason,
 )
 
 logger = logging.getLogger(__name__)
@@ -53,7 +53,7 @@ class Layer2Orchestrator:
         if not pending:
             return False
 
-        if any(DetectionChannel.USER_CORRECTION in s.detection_channels for s in pending):
+        if any(s.trigger_reason == TriggerReason.USER_CORRECTION for s in pending):
             return True
 
         if len(pending) >= self._config.layer2.trigger.min_pending_signals:
@@ -81,7 +81,7 @@ class Layer2Orchestrator:
             logger.info("Layer 2 pipeline starting")
 
         pending_signals = list_pending_signals(self._config)
-        signal_trigger_map = {s.signal_id: s.detection_channels for s in pending_signals}
+        signal_trigger_map = {s.signal_id: s.trigger_reason for s in pending_signals}
 
         logger.info("Step 0: Materializing signals")
         self._trace("step_start", {"step": "materialize"})
@@ -91,7 +91,7 @@ class Layer2Orchestrator:
 
         fast_track_exps = [
             e for e in new_experiences
-            if DetectionChannel.USER_CORRECTION in (signal_trigger_map.get(e.source_signal) or [])
+            if signal_trigger_map.get(e.source_signal) == TriggerReason.USER_CORRECTION
         ]
         fast_track_taxonomy = []
         if fast_track_exps:

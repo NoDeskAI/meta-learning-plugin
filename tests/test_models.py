@@ -1,7 +1,6 @@
 from datetime import datetime
 
 from meta_learning.shared.models import (
-    DetectionChannel,
     ErrorTaxonomy,
     ExperienceCluster,
     ExperienceIndex,
@@ -10,6 +9,7 @@ from meta_learning.shared.models import (
     Signal,
     TaskContext,
     TaskType,
+    TriggerReason,
 )
 
 
@@ -19,8 +19,7 @@ class TestSignalModel:
             signal_id="sig-20260309-001",
             timestamp=datetime.now(),
             session_id="abc",
-            detection_channels=[DetectionChannel.SELF_RECOVERY],
-            primary_channel=DetectionChannel.SELF_RECOVERY,
+            trigger_reason=TriggerReason.SELF_RECOVERY,
             keywords=["error"],
             task_summary="test",
             step_count=1,
@@ -28,12 +27,12 @@ class TestSignalModel:
         assert sig.processed is False
         assert sig.error_snapshot is None
 
-    def test_detection_channel_values(self):
-        assert DetectionChannel.USER_CORRECTION == "user_correction"
-        assert DetectionChannel.SELF_RECOVERY == "self_recovery"
-        assert DetectionChannel.UNRESOLVED_ERROR == "unresolved_error"
-        assert DetectionChannel.NEW_TOOL == "new_tool"
-        assert DetectionChannel.EFFICIENCY_ANOMALY == "efficiency_anomaly"
+    def test_trigger_reason_values(self):
+        assert TriggerReason.USER_CORRECTION == "user_correction"
+        assert TriggerReason.SELF_RECOVERY == "self_recovery"
+        assert TriggerReason.UNRESOLVED_ERROR == "unresolved_error"
+        assert TriggerReason.NEW_TOOL == "new_tool"
+        assert TriggerReason.EFFICIENCY_ANOMALY == "efficiency_anomaly"
 
 
 class TestExperienceModel:

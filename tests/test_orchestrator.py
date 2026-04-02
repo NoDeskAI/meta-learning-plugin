@@ -6,8 +6,8 @@ import pytest
 from meta_learning.layer2.orchestrator import Layer2Orchestrator
 from meta_learning.shared.io import write_signal
 from meta_learning.shared.models import (
-    DetectionChannel,
     Signal,
+    TriggerReason,
 )
 
 _MOCK_SESSION_CONTENT = (
@@ -33,8 +33,7 @@ def _write_n_signals(n: int, tmp_config):
             timestamp=datetime.now(),
             session_id=session_id,
             memory_date=date(2026, 3, 9),
-            detection_channels=[DetectionChannel.SELF_RECOVERY],
-            primary_channel=DetectionChannel.SELF_RECOVERY,
+            trigger_reason=TriggerReason.SELF_RECOVERY,
             keywords=["error", "test"],
             task_summary=f"Fix coding error #{i}",
             error_snapshot=f"Error: type mismatch #{i}",
@@ -52,8 +51,7 @@ def _write_user_correction_signal(tmp_config):
         timestamp=datetime.now(),
         session_id=session_id,
         memory_date=date(2026, 3, 9),
-        detection_channels=[DetectionChannel.USER_CORRECTION],
-        primary_channel=DetectionChannel.USER_CORRECTION,
+        trigger_reason=TriggerReason.USER_CORRECTION,
         keywords=["correction"],
         task_summary="User corrected approach",
         user_feedback="Use async instead",
@@ -133,8 +131,7 @@ class TestEndToEnd:
                 signal_id=f"sig-20260309-{i + 1:03d}",
                 timestamp=datetime.now(),
                 session_id=session_id,
-                detection_channels=[DetectionChannel.SELF_RECOVERY],
-                primary_channel=DetectionChannel.SELF_RECOVERY,
+                trigger_reason=TriggerReason.SELF_RECOVERY,
                 keywords=["TS2345", "type", "error"],
                 task_summary=f"Fix coding type error #{i}",
                 error_snapshot="TS2345: type mismatch generic inference",

@@ -67,17 +67,15 @@ Layer 3（离线深度学习，手动触发）
   技能卡片 → 注入下一次 Agent 执行
 ```
 
-### 信号检测通道（多标签）
+### 信号触发条件
 
-| 检测通道 | 说明 |
+| 触发类型 | 说明 |
 |---------|------|
 | `user_correction` | 用户纠正了 Agent 的行为（最高优先级信号） |
 | `unresolved_error` | Agent 遇到错误但未解决（高学习价值） |
 | `self_recovery` | Agent 遇到错误并自行恢复 |
 | `new_tool` | Agent 首次使用某个工具 |
 | `efficiency_anomaly` | 步骤数显著超过平均值 |
-
-一个信号可同时携带多个检测通道（如 `user_correction` + `self_recovery`），`primary_channel` 取最高优先级通道。
 
 ## 配置说明
 

@@ -52,15 +52,15 @@ cat ~/.deskclaw/nanobot/workspace/skills/meta-learning/SKILL.md
 
 **预期**：
 
-- `channels=[user_correction]`（检测通道包含 user_correction）
-- 信号文件中 `detection_channels` 包含 `user_correction`，`primary_channel: user_correction`
+- `trigger=user_correction`
+- 信号文件中 `trigger_reason: user_correction`
 - `[Action Required]` 出现在返回值中
 
 **验证**：
 
 ```bash
-# 查看最新信号文件的 detection_channels
-cat ~/.deskclaw/nanobot/workspace/meta-learning-data/signal_buffer/sig-*.yaml | grep -A5 detection_channels
+# 查看最新信号文件的 trigger_reason
+cat ~/.deskclaw/nanobot/workspace/meta-learning-data/signal_buffer/sig-*.yaml | grep trigger_reason
 ```
 
 ---
@@ -149,9 +149,7 @@ cat ~/.deskclaw/nanobot/workspace/meta-learning-data/error_taxonomy.yaml | head 
    signal_id: sig-manual-test
    timestamp: '2026-03-31T10:00:00'
    session_id: unknown
-   detection_channels:
-     - user_correction
-   primary_channel: user_correction
+   trigger_reason: user_correction
    keywords: [test, manual]
    task_summary: Manual test signal
    user_feedback: This is a test correction

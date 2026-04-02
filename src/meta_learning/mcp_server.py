@@ -237,7 +237,7 @@ async def capture_signal(
     Analyzes the task outcome and, if meaningful learning triggers are found
     (self-recovery, unresolved error, user correction, new tool, efficiency
     anomaly), writes a YAML signal file to signal_buffer/ for later Layer 2
-    processing. Multiple detection channels can fire simultaneously.
+    processing.
 
     If Layer 2 trigger conditions are met, the consolidation pipeline runs
     automatically in the background — no need to call run_layer2 separately.
@@ -285,10 +285,9 @@ async def capture_signal(
     if signal.error_snapshot and _qt_index is not None:
         _qt_index.register_failure_signature(signal.error_snapshot)
 
-    channels_str = ', '.join(c.value for c in signal.detection_channels)
     result = (
         f"Signal captured: [{signal.signal_id}] "
-        f"channels=[{channels_str}], "
+        f"trigger={signal.trigger_reason}, "
         f"file={config.signal_buffer_path}/{signal.signal_id}.yaml"
     )
 
@@ -499,9 +498,8 @@ def status() -> str:
     if pending_signals:
         lines.append("\nRecent pending signals:")
         for sig in pending_signals[-5:]:
-            channels_str = ', '.join(c.value for c in sig.detection_channels)
             lines.append(
-                f"  [{sig.signal_id}] [{channels_str}]: "
+                f"  [{sig.signal_id}] [trigger={sig.trigger_reason}]: "
                 f"{sig.task_summary[:60]}"
             )
 

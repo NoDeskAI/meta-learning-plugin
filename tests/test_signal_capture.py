@@ -2,8 +2,8 @@ from pathlib import Path
 
 from meta_learning.layer1.signal_capture import SignalCapture
 from meta_learning.shared.models import (
-    DetectionChannel,
     TaskContext,
+    TriggerReason,
 )
 
 
@@ -19,8 +19,7 @@ class TestSignalCaptureTriggering:
         )
         signal = capture.evaluate_and_capture(ctx)
         assert signal is not None
-        assert DetectionChannel.SELF_RECOVERY in signal.detection_channels
-        assert signal.primary_channel == DetectionChannel.SELF_RECOVERY
+        assert signal.trigger_reason == TriggerReason.SELF_RECOVERY
         assert signal.error_snapshot is not None
 
     def test_unresolved_error_trigger(self, tmp_config):
@@ -34,8 +33,7 @@ class TestSignalCaptureTriggering:
         )
         signal = capture.evaluate_and_capture(ctx)
         assert signal is not None
-        assert DetectionChannel.UNRESOLVED_ERROR in signal.detection_channels
-        assert signal.primary_channel == DetectionChannel.UNRESOLVED_ERROR
+        assert signal.trigger_reason == TriggerReason.UNRESOLVED_ERROR
 
     def test_user_correction_trigger(self, tmp_config):
         capture = SignalCapture(tmp_config)
@@ -46,8 +44,7 @@ class TestSignalCaptureTriggering:
         )
         signal = capture.evaluate_and_capture(ctx)
         assert signal is not None
-        assert DetectionChannel.USER_CORRECTION in signal.detection_channels
-        assert signal.primary_channel == DetectionChannel.USER_CORRECTION
+        assert signal.trigger_reason == TriggerReason.USER_CORRECTION
         assert signal.user_feedback is not None
 
     def test_new_tool_trigger(self, tmp_config):
@@ -59,8 +56,7 @@ class TestSignalCaptureTriggering:
         )
         signal = capture.evaluate_and_capture(ctx)
         assert signal is not None
-        assert DetectionChannel.NEW_TOOL in signal.detection_channels
-        assert signal.primary_channel == DetectionChannel.NEW_TOOL
+        assert signal.trigger_reason == TriggerReason.NEW_TOOL
 
     def test_efficiency_anomaly_trigger(self, tmp_config):
         capture = SignalCapture(tmp_config)
@@ -70,8 +66,7 @@ class TestSignalCaptureTriggering:
         )
         signal = capture.evaluate_and_capture(ctx)
         assert signal is not None
-        assert DetectionChannel.EFFICIENCY_ANOMALY in signal.detection_channels
-        assert signal.primary_channel == DetectionChannel.EFFICIENCY_ANOMALY
+        assert signal.trigger_reason == TriggerReason.EFFICIENCY_ANOMALY
 
     def test_no_trigger_on_smooth_task(self, tmp_config):
         capture = SignalCapture(tmp_config)
@@ -125,8 +120,8 @@ class TestSignalCaptureKeywordExtraction:
         assert "kubectl" in signal.keywords
 
 
-class TestSignalCaptureMultiLabel:
-    def test_user_correction_plus_self_recovery(self, tmp_config):
+class TestSignalCapturePriority:
+    def test_user_correction_wins_over_self_recovery(self, tmp_config):
         capture = SignalCapture(tmp_config)
         ctx = TaskContext(
             task_description="Fix broken deploy",
@@ -137,37 +132,4 @@ class TestSignalCaptureMultiLabel:
         )
         signal = capture.evaluate_and_capture(ctx)
         assert signal is not None
-        assert DetectionChannel.USER_CORRECTION in signal.detection_channels
-        assert DetectionChannel.SELF_RECOVERY in signal.detection_channels
-        assert signal.primary_channel == DetectionChannel.USER_CORRECTION
-
-    def test_self_recovery_plus_efficiency_anomaly(self, tmp_config):
-        capture = SignalCapture(tmp_config)
-        ctx = TaskContext(
-            task_description="Complex task",
-            errors_encountered=["Error: something broke"],
-            errors_fixed=True,
-            step_count=50,
-        )
-        signal = capture.evaluate_and_capture(ctx)
-        assert signal is not None
-        assert DetectionChannel.SELF_RECOVERY in signal.detection_channels
-        assert DetectionChannel.EFFICIENCY_ANOMALY in signal.detection_channels
-        assert signal.primary_channel == DetectionChannel.SELF_RECOVERY
-
-    def test_user_correction_plus_unresolved_error_plus_new_tool(self, tmp_config):
-        capture = SignalCapture(tmp_config)
-        ctx = TaskContext(
-            task_description="Deploy new service",
-            errors_encountered=["Connection refused"],
-            errors_fixed=False,
-            user_corrections=["Wrong endpoint"],
-            new_tools=["docker_compose"],
-            step_count=3,
-        )
-        signal = capture.evaluate_and_capture(ctx)
-        assert signal is not None
-        assert DetectionChannel.USER_CORRECTION in signal.detection_channels
-        assert DetectionChannel.UNRESOLVED_ERROR in signal.detection_channels
-        assert DetectionChannel.NEW_TOOL in signal.detection_channels
-        assert signal.primary_channel == DetectionChannel.USER_CORRECTION
+        assert signal.trigger_reason == TriggerReason.USER_CORRECTION

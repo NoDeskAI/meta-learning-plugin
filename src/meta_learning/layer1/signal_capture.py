@@ -4,11 +4,10 @@ from datetime import datetime
 
 from meta_learning.shared.io import next_signal_id, write_signal
 from meta_learning.shared.models import (
-    CHANNEL_PRIORITY,
-    DetectionChannel,
     MetaLearningConfig,
     Signal,
     TaskContext,
+    TriggerReason,
 )
 
 
@@ -17,39 +16,31 @@ class SignalCapture:
         self._config = config
 
     def evaluate_and_capture(self, context: TaskContext) -> Signal | None:
-        channels = self._detect_channels(context)
-        if not channels:
+        trigger = self._determine_trigger(context)
+        if trigger is None:
             return None
 
-        signal = self._build_signal(context, channels)
+        signal = self._build_signal(context, trigger)
         write_signal(signal, self._config)
         return signal
 
-    def _detect_channels(self, context: TaskContext) -> list[DetectionChannel]:
-        channels: list[DetectionChannel] = []
+    def _determine_trigger(self, context: TaskContext) -> TriggerReason | None:
         if context.user_corrections:
-            channels.append(DetectionChannel.USER_CORRECTION)
+            return TriggerReason.USER_CORRECTION
         if context.errors_encountered:
             if context.errors_fixed:
-                channels.append(DetectionChannel.SELF_RECOVERY)
+                return TriggerReason.SELF_RECOVERY
             else:
-                channels.append(DetectionChannel.UNRESOLVED_ERROR)
+                return TriggerReason.UNRESOLVED_ERROR
         if context.new_tools:
-            channels.append(DetectionChannel.NEW_TOOL)
+            return TriggerReason.NEW_TOOL
         threshold = self._config.layer1.signal_capture.efficiency_anomaly_threshold
         avg = self._config.layer1.signal_capture.average_step_count
         if context.step_count > avg * threshold:
-            channels.append(DetectionChannel.EFFICIENCY_ANOMALY)
-        return channels
+            return TriggerReason.EFFICIENCY_ANOMALY
+        return None
 
-    @staticmethod
-    def _pick_primary(channels: list[DetectionChannel]) -> DetectionChannel:
-        for ch in CHANNEL_PRIORITY:
-            if ch in channels:
-                return ch
-        return channels[0]
-
-    def _build_signal(self, context: TaskContext, channels: list[DetectionChannel]) -> Signal:
+    def _build_signal(self, context: TaskContext, trigger: TriggerReason) -> Signal:
         sig_id = next_signal_id(self._config)
 
         keywords = _extract_keywords(context)
@@ -83,8 +74,7 @@ class SignalCapture:
             timestamp=datetime.now(),
             session_id=context.session_id or "unknown",
             memory_date=datetime.now().date(),
-            detection_channels=channels,
-            primary_channel=self._pick_primary(channels),
+            trigger_reason=trigger,
             keywords=keywords,
             task_summary=context.task_description[:200],
             error_snapshot=error_snapshot,

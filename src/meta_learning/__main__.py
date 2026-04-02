@@ -108,8 +108,7 @@ def cmd_status(args: argparse.Namespace) -> int:
     if pending_signals:
         print("\nRecent pending signals:")
         for sig in pending_signals[-5:]:
-            channels_str = ', '.join(c.value for c in sig.detection_channels)
-            print(f"  [{sig.signal_id}] [{channels_str}]: {sig.task_summary[:60]}")
+            print(f"  [{sig.signal_id}] [trigger={sig.trigger_reason}]: {sig.task_summary[:60]}")
 
     if taxonomy_entries:
         print("\nTaxonomy entries:")
