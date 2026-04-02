@@ -52,15 +52,15 @@ cat ~/.deskclaw/nanobot/workspace/skills/meta-learning/SKILL.md
 
 **预期**：
 
-- `trigger=user_correction`（不是 `error_recovery`）
-- 信号文件中 `trigger_reason: user_correction`
+- `channels=[user_correction]`（检测通道包含 user_correction）
+- 信号文件中 `detection_channels` 包含 `user_correction`，`primary_channel: user_correction`
 - `[Action Required]` 出现在返回值中
 
 **验证**：
 
 ```bash
-# 查看最新信号文件的 trigger_reason
-cat ~/.deskclaw/nanobot/workspace/meta-learning-data/signal_buffer/sig-*.yaml | grep trigger_reason
+# 查看最新信号文件的 detection_channels
+cat ~/.deskclaw/nanobot/workspace/meta-learning-data/signal_buffer/sig-*.yaml | grep -A5 detection_channels
 ```
 
 ---
@@ -149,7 +149,9 @@ cat ~/.deskclaw/nanobot/workspace/meta-learning-data/error_taxonomy.yaml | head 
    signal_id: sig-manual-test
    timestamp: '2026-03-31T10:00:00'
    session_id: unknown
-   trigger_reason: user_correction
+   detection_channels:
+     - user_correction
+   primary_channel: user_correction
    keywords: [test, manual]
    task_summary: Manual test signal
    user_feedback: This is a test correction
@@ -289,7 +291,7 @@ grep "id:" ~/.deskclaw/nanobot/workspace/meta-learning-data/error_taxonomy.yaml 
 | TC-02 | 纠正+错误共存 | USER_CORRECTION (优先) | 信号分类优先级 |
 | TC-03 | 下次任务生效 | - | SKILL.md 注入 -> agent 行为变化 |
 | TC-04 | quick_think 命中 | - | taxonomy -> QuickThink 检索 |
-| TC-05 | 非纠正信号累积 | ERROR_RECOVERY x2 | >=2 阈值触发 |
+| TC-05 | 非纠正信号累积 | SELF_RECOVERY x2 | >=2 阈值触发 |
 | TC-06 | Heartbeat 兜底 | USER_CORRECTION | HEARTBEAT.md -> 定时检查 |
 | TC-07 | 跨会话迁移 | USER_CORRECTION | 会话 A 学习 -> 会话 B 受益 |
 | TC-08 | 正常对话无噪音 | 无触发 | 不应产生信号 |
