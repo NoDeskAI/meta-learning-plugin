@@ -12,11 +12,21 @@ def _env_or(env_key: str, default: str) -> str:
     return os.environ.get(env_key, default)
 
 
-class TriggerReason(StrEnum):
-    ERROR_RECOVERY = "error_recovery"
+class DetectionChannel(StrEnum):
     USER_CORRECTION = "user_correction"
+    SELF_RECOVERY = "self_recovery"
+    UNRESOLVED_ERROR = "unresolved_error"
     NEW_TOOL = "new_tool"
     EFFICIENCY_ANOMALY = "efficiency_anomaly"
+
+
+CHANNEL_PRIORITY: list[DetectionChannel] = [
+    DetectionChannel.USER_CORRECTION,
+    DetectionChannel.UNRESOLVED_ERROR,
+    DetectionChannel.SELF_RECOVERY,
+    DetectionChannel.NEW_TOOL,
+    DetectionChannel.EFFICIENCY_ANOMALY,
+]
 
 
 class TaskType(StrEnum):
@@ -47,7 +57,8 @@ class Signal(BaseModel):
     timestamp: datetime
     session_id: str
     memory_date: date | None = None
-    trigger_reason: TriggerReason
+    detection_channels: list[DetectionChannel]
+    primary_channel: DetectionChannel
     keywords: list[str]
     task_summary: str
     error_snapshot: str | None = None

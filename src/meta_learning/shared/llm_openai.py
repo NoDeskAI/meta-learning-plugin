@@ -20,6 +20,7 @@ from meta_learning.shared.models import (
     CapabilityAnalysis,
     ConsolidateJudgment,
     CrossTaskAnalysis,
+    DetectionChannel,
     Experience,
     MaterializeResult,
     MemoryAction,
@@ -32,7 +33,6 @@ from meta_learning.shared.models import (
     TaskType,
     TaxonomyEntry,
     TaxonomyExtraction,
-    TriggerReason,
 )
 
 logger = logging.getLogger(__name__)
@@ -172,7 +172,7 @@ ANALYSIS GUIDELINES:
    - Coding/DevOps: testing discipline, dependency management, error handling, edge case coverage.
 """
         if (
-            signal.trigger_reason == TriggerReason.USER_CORRECTION
+            DetectionChannel.USER_CORRECTION in signal.detection_channels
             and signal.user_feedback
         ):
             system += """
@@ -192,7 +192,7 @@ failure-analysis mode to INSTRUCTION EXTRACTION mode:
 5. meta_insight = a directly executable rule from the user's words.
    Do NOT generalize a specific user preference into abstract advice.
 """
-        if signal.trigger_reason == TriggerReason.USER_CORRECTION:
+        if DetectionChannel.USER_CORRECTION in signal.detection_channels:
             user = f"""**User correction (GROUND TRUTH):** {signal.user_feedback or 'N/A'}
 
 Signal ID: {signal.signal_id}
@@ -204,8 +204,9 @@ Resolution: {signal.resolution_snapshot or 'N/A'}
 Session context:
 {session_context[:6000]}"""
         else:
+            channels_str = ', '.join(c.value for c in signal.detection_channels)
             user = f"""Signal ID: {signal.signal_id}
-Trigger: {signal.trigger_reason}
+Channels: {channels_str}
 Task: {signal.task_summary}
 Keywords: {', '.join(signal.keywords)}
 Error: {signal.error_snapshot or 'N/A'}

@@ -619,8 +619,8 @@ def _capture_correction_signal(
         logger.info("  Signal capture: no signal (no trigger)")
         return None
     logger.info(
-        "  Signal capture: [%s] trigger=%s",
-        signal.signal_id, signal.trigger_reason.value,
+        "  Signal capture: [%s] channels=[%s]",
+        signal.signal_id, ', '.join(c.value for c in signal.detection_channels),
     )
     return signal
 

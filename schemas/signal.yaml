@@ -4,7 +4,8 @@ signal:
     - signal_id
     - timestamp
     - session_id
-    - trigger_reason
+    - detection_channels
+    - primary_channel
     - keywords
     - task_summary
     - step_count
@@ -23,13 +24,27 @@ signal:
       type: string
       format: date
       description: "Date key for memory/YYYY-MM-DD.md (optional supplementary context)"
-    trigger_reason:
+    detection_channels:
+      type: array
+      items:
+        type: string
+        enum:
+          - user_correction
+          - self_recovery
+          - unresolved_error
+          - new_tool
+          - efficiency_anomaly
+      minItems: 1
+      description: "Multi-label detection channels (orthogonal, non-exclusive)"
+    primary_channel:
       type: string
       enum:
-        - error_recovery
         - user_correction
+        - self_recovery
+        - unresolved_error
         - new_tool
         - efficiency_anomaly
+      description: "Highest-priority channel from detection_channels"
     keywords:
       type: array
       items:
@@ -41,7 +56,7 @@ signal:
     error_snapshot:
       type: string
       nullable: true
-      description: "Populated only when trigger_reason is error_recovery"
+      description: "Populated when self_recovery or unresolved_error is in detection_channels"
     resolution_snapshot:
       type: string
       nullable: true
