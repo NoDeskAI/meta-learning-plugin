@@ -12,6 +12,7 @@ from scipy.spatial.distance import squareform
 
 from meta_learning.shared.io import (
     list_all_experiences,
+    load_error_taxonomy,
     load_experience_index,
     next_cluster_id,
     read_signal,
@@ -254,16 +255,30 @@ class Consolidator:
     def get_clusters_ready_for_taxonomy(self) -> list[ExperienceCluster]:
         index = load_experience_index(self._config)
         min_size = self._config.layer2.consolidate.min_cluster_size_for_taxonomy
-        stale = getattr(self, "_stale_taxonomy_ids", set())
-        return [
-            c
-            for c in index.clusters
-            if len(c.experience_ids) >= min_size
-            and (
-                c.promoted_to_taxonomy is None
-                or c.promoted_to_taxonomy in stale
+
+        taxonomy = load_error_taxonomy(self._config)
+        existing_tax_ids = {e.id for e in taxonomy.all_entries()}
+
+        all_exp_map = {e.id: e for e in list_all_experiences(self._config)}
+
+        ready: list[ExperienceCluster] = []
+        for c in index.clusters:
+            if len(c.experience_ids) < min_size:
+                continue
+
+            members = [all_exp_map.get(eid) for eid in c.experience_ids]
+            members = [m for m in members if m is not None]
+            if not members:
+                continue
+
+            all_covered = all(
+                m.promoted_to is not None and m.promoted_to in existing_tax_ids
+                for m in members
             )
-        ]
+            if not all_covered:
+                ready.append(c)
+
+        return ready
 
 
 def _group_by_task_type(

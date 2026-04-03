@@ -4,6 +4,7 @@ import logging
 from datetime import date
 
 from meta_learning.shared.io import (
+    list_all_experiences,
     load_error_taxonomy,
     load_experience_index,
     next_taxonomy_id,
@@ -88,6 +89,7 @@ class TaxonomyBuilder:
             return []
 
         taxonomy = load_error_taxonomy(self._config)
+        existing_entry_ids = {e.id for e in taxonomy.all_entries()}
         all_existing = taxonomy.all_entries()
         new_entries: list[TaxonomyEntry] = []
 
@@ -96,11 +98,43 @@ class TaxonomyBuilder:
             if not experiences:
                 continue
 
-            old_tax_id = cluster.promoted_to_taxonomy
-            if old_tax_id:
-                logger.info("Refreshing stale taxonomy entry %s", old_tax_id)
-                taxonomy.remove_entry(old_tax_id)
-                all_existing = [e for e in all_existing if e.id != old_tax_id]
+            promoted_groups: dict[str, list[Experience]] = {}
+            unpromoted: list[Experience] = []
+            for exp in experiences:
+                if exp.promoted_to and exp.promoted_to in existing_entry_ids:
+                    promoted_groups.setdefault(exp.promoted_to, []).append(exp)
+                else:
+                    unpromoted.append(exp)
+
+            if not unpromoted and promoted_groups:
+                logger.info(
+                    "Cluster %s: all %d experiences already covered, skipping",
+                    cluster.cluster_id, len(experiences),
+                )
+                continue
+
+            if unpromoted and promoted_groups:
+                dominant_tax_id = max(
+                    promoted_groups, key=lambda k: len(promoted_groups[k])
+                )
+                dominant_entry = next(
+                    (e for e in all_existing if e.id == dominant_tax_id), None
+                )
+                if dominant_entry is not None:
+                    for exp in unpromoted:
+                        if exp.id not in dominant_entry.source_exps:
+                            dominant_entry.source_exps.append(exp.id)
+                    dominant_entry.confidence = min(
+                        dominant_entry.confidence + 0.05 * len(unpromoted), 1.0
+                    )
+                    dominant_entry.last_verified = date.today()
+                    self._mark_experiences_promoted(unpromoted, dominant_tax_id)
+                    self._mark_cluster_promoted(cluster, dominant_tax_id)
+                    logger.info(
+                        "Incremental update: added %d experiences to %s",
+                        len(unpromoted), dominant_tax_id,
+                    )
+                    continue
 
             extraction = await self._llm.extract_taxonomy(experiences)
 
@@ -127,7 +161,7 @@ class TaxonomyBuilder:
 
             domain = cluster.task_type.value
             subdomain = _infer_subdomain(experiences)
-            entry_id = old_tax_id or next_taxonomy_id(
+            entry_id = next_taxonomy_id(
                 taxonomy, _make_prefix(domain, subdomain)
             )
 
@@ -146,10 +180,15 @@ class TaxonomyBuilder:
 
             taxonomy.add_entry(domain, subdomain, entry)
             all_existing.append(entry)
+            existing_entry_ids.add(entry_id)
             new_entries.append(entry)
 
             self._mark_experiences_promoted(experiences, entry_id)
             self._mark_cluster_promoted(cluster, entry_id)
+
+        gc_count = _gc_orphan_entries(taxonomy, self._config)
+        if gc_count:
+            logger.info("Orphan GC removed %d stale taxonomy entries", gc_count)
 
         save_error_taxonomy(taxonomy, self._config)
         return new_entries
@@ -214,3 +253,20 @@ def _compute_cluster_confidence(experiences: list[Experience]) -> float:
     avg_conf = sum(e.confidence for e in experiences) / len(experiences)
     size_bonus = min(len(experiences) * 0.05, 0.2)
     return min(avg_conf + size_bonus, 1.0)
+
+
+def _gc_orphan_entries(
+    taxonomy: "ErrorTaxonomy", config: MetaLearningConfig
+) -> int:
+    """Remove taxonomy entries that no experience's ``promoted_to`` points to."""
+    all_exps = list_all_experiences(config)
+    live_tax_ids = {e.promoted_to for e in all_exps if e.promoted_to}
+
+    all_entries = taxonomy.all_entries()
+    orphan_ids = [e.id for e in all_entries if e.id not in live_tax_ids]
+
+    for oid in orphan_ids:
+        taxonomy.remove_entry(oid)
+        logger.info("GC: removed orphan taxonomy entry %s", oid)
+
+    return len(orphan_ids)
