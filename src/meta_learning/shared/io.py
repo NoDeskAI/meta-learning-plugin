@@ -1,7 +1,9 @@
 from __future__ import annotations
 
 import json
+import logging
 import threading
+from dataclasses import dataclass, field
 from datetime import datetime
 from pathlib import Path
 
@@ -16,6 +18,8 @@ from meta_learning.shared.models import (
     Signal,
     TaxonomyEntry,
 )
+
+logger = logging.getLogger(__name__)
 
 
 def load_config(config_path: str | Path) -> MetaLearningConfig:
@@ -251,6 +255,121 @@ def resolve_session_file(session_id: str, config: MetaLearningConfig) -> Path:
                 return p
 
     return sessions_dir / f"{session_id}.jsonl"
+
+
+_META_LEARNING_TOOLS = frozenset({
+    "mcp_meta-learning_capture_signal",
+    "mcp_meta-learning_quick_think",
+    "mcp_meta-learning_run_layer2",
+    "mcp_meta-learning_run_layer3",
+    "mcp_meta-learning_status",
+    "mcp_meta-learning_layer2_status",
+    "mcp_meta-learning_sync_taxonomy_to_nobot",
+    "capture_signal",
+    "quick_think",
+    "run_layer2",
+    "run_layer3",
+    "status",
+    "layer2_status",
+    "sync_taxonomy_to_nobot",
+})
+
+
+@dataclass
+class SessionEnrichment:
+    tools_used: list[str] = field(default_factory=list)
+    step_count: int = 0
+    action_trace: str | None = None
+
+
+def enrich_from_session(
+    session_id: str,
+    config: MetaLearningConfig,
+) -> SessionEnrichment:
+    """Parse session JSONL to extract structural data for signal enrichment.
+
+    Extracts tool names, step count, and an action trace string from the
+    session transcript.  Pure structural JSON parsing — no LLM, no keyword
+    heuristics.
+    """
+    session_file = resolve_session_file(session_id, config)
+    if not session_file.exists():
+        logger.debug("enrich_from_session: session file not found for %s", session_id)
+        return SessionEnrichment()
+
+    seen_tools: list[str] = []
+    step_count = 0
+    trace_parts: list[str] = []
+
+    try:
+        with open(session_file) as f:
+            for raw_line in f:
+                try:
+                    record = json.loads(raw_line.strip())
+                except json.JSONDecodeError:
+                    continue
+
+                if record.get("role") != "assistant":
+                    continue
+                tool_calls = record.get("tool_calls")
+                if not isinstance(tool_calls, list) or not tool_calls:
+                    continue
+
+                has_business_call = False
+                for tc in tool_calls:
+                    func = tc.get("function", {})
+                    name = func.get("name", "")
+                    if not name or name in _META_LEARNING_TOOLS:
+                        continue
+                    has_business_call = True
+                    if name not in seen_tools:
+                        seen_tools.append(name)
+                    trace_parts.append(_format_trace_entry(name, func.get("arguments")))
+
+                if has_business_call:
+                    step_count += 1
+    except OSError:
+        logger.warning("enrich_from_session: failed to read %s", session_file)
+        return SessionEnrichment()
+
+    action_trace: str | None = None
+    if trace_parts:
+        action_trace = " → ".join(trace_parts)
+        if len(action_trace) > 2000:
+            action_trace = action_trace[:1997] + "..."
+
+    return SessionEnrichment(
+        tools_used=seen_tools,
+        step_count=step_count,
+        action_trace=action_trace,
+    )
+
+
+def _format_trace_entry(name: str, arguments_raw: str | dict | None) -> str:
+    """Format a single tool call into a readable trace entry.
+
+    Extracts the ``path`` argument when present (the most common key param
+    across file-operation tools).  Falls back to just the tool name.
+    """
+    if arguments_raw is None:
+        return name
+
+    args: dict
+    if isinstance(arguments_raw, str):
+        try:
+            args = json.loads(arguments_raw)
+        except (json.JSONDecodeError, TypeError):
+            return name
+    elif isinstance(arguments_raw, dict):
+        args = arguments_raw
+    else:
+        return name
+
+    path = args.get("path")
+    if isinstance(path, str):
+        return f"{name}({path})"
+
+    return name
 
 
 class _IdCounter:

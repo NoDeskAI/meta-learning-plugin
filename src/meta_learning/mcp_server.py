@@ -19,6 +19,7 @@ from meta_learning.layer1.quick_think import QuickThinkIndex
 from meta_learning.layer1.signal_capture import SignalCapture
 from meta_learning.layer2.consolidate import bootstrap_multimodal_embedding
 from meta_learning.shared.io import (
+    enrich_from_session,
     list_all_experiences,
     list_pending_signals,
     load_config,
@@ -263,6 +264,15 @@ async def capture_signal(
     config = _get_config()
     capture = SignalCapture(config)
 
+    if session_id and session_id != "unknown":
+        enrichment = enrich_from_session(session_id, config)
+        if not tools_used and enrichment.tools_used:
+            tools_used = enrichment.tools_used
+        if step_count == 0 and enrichment.step_count > 0:
+            step_count = enrichment.step_count
+    else:
+        enrichment = None
+
     context = TaskContext(
         task_description=task_description,
         session_id=session_id,
@@ -275,6 +285,7 @@ async def capture_signal(
         extra={
             "resolution": resolution_snapshot,
             "image_snapshots": image_snapshots or [],
+            "action_trace": enrichment.action_trace if enrichment else None,
         },
     )
 
