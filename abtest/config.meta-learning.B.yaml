@@ -21,10 +21,7 @@ layer2:
     initial_confidence: 0.6
   consolidate:
     min_cluster_size_for_taxonomy: 3
-    use_llm_clustering: true
-    max_llm_calls_per_group: 50
     similarity_threshold: 0.3
-    batch_size: 10
   taxonomy:
     min_confidence_for_skill: 0.8
     min_source_exps_for_skill: 5
