@@ -1,0 +1,51 @@
+# DeskClaw 自动化评测专用配置
+# 降低触发门槛，使单次纠正即可触发完整 layer2 流水线
+
+workspace_root: "~/.deskclaw/nanobot/workspace/meta-learning-data"
+sessions_root: "~/.deskclaw/nanobot/workspace/sessions"
+
+signal_buffer_dir: "signal_buffer"
+experience_pool_dir: "experience_pool"
+error_taxonomy_path: "error_taxonomy.yaml"
+skills_dir: "skills"
+
+layer1:
+  quick_think:
+    max_latency_ms: 50
+  signal_capture:
+    efficiency_anomaly_threshold: 2.0
+    average_step_count: 5
+
+layer2:
+  trigger:
+    min_pending_signals: 1
+    max_hours_since_last: 1
+  materialize:
+    initial_confidence: 0.6
+  consolidate:
+    min_cluster_size_for_taxonomy: 1
+    similarity_threshold: 0.15
+  taxonomy:
+    min_confidence_for_skill: 0.8
+    min_source_exps_for_skill: 1
+
+confidence:
+  hit_success_boost: 0.1
+  contradiction_penalty: 0.2
+  prune_threshold: 0.3
+  promote_threshold: 0.8
+  decay_enabled: false
+
+llm:
+  provider: "openai"
+  model: "minimax-m2.7"
+  temperature: 0.3
+  max_tokens: 2000
+
+dashscope:
+  enabled: false
+
+experiment:
+  experiment_id: "deskclaw-eval"
+  group: "A"
+  enabled: true
