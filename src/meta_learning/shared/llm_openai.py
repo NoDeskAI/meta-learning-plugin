@@ -345,7 +345,7 @@ it MUST appear in prevention.
     ) -> SkillEvolveResult:
         system = """You evaluate whether a taxonomy entry warrants creating or updating a skill.
 Respond with JSON:
-- action: one of "create"|"append"|"replace"|"merge"|"split"|"none"
+- action: one of "create"|"append"|"replace"|"none"
 - target_skill: string|null (skill name if updating)
 - changes_description: string
 - new_content: string|null (full skill content if create/replace, or appended section if append)

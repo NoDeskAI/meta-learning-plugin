@@ -43,12 +43,27 @@ class Materializer:
             processable.append(s)
 
         experiences: list[Experience] = []
+        failed_ids: list[str] = []
         for signal in processable:
-            exp = await self._materialize_one(signal)
+            try:
+                exp = await self._materialize_one(signal)
+            except Exception:
+                logger.exception(
+                    "Failed to materialize signal %s, skipping",
+                    signal.signal_id,
+                )
+                failed_ids.append(signal.signal_id)
+                continue
             if exp is not None:
                 experiences.append(exp)
                 mark_signal_processed(signal.signal_id, self._config)
 
+        if failed_ids:
+            logger.warning(
+                "Materialization completed with %d failure(s): %s",
+                len(failed_ids),
+                ", ".join(failed_ids),
+            )
         return experiences
 
     async def _materialize_one(self, signal: Signal) -> Experience | None:
@@ -66,6 +81,7 @@ class Materializer:
         result = await self._llm.materialize_signal(signal, session_context)
 
         exp_id = next_experience_id(self._config)
+        init_conf = self._config.layer2.materialize.initial_confidence
         experience = Experience(
             id=exp_id,
             task_type=result.task_type,
@@ -73,7 +89,8 @@ class Materializer:
             source_signal=signal.signal_id,
             source_session=signal.session_id,
             source_memory=signal.memory_date,
-            confidence=self._config.layer2.materialize.initial_confidence,
+            initial_confidence=init_conf,
+            confidence=init_conf,
             verification_count=1,
             scene=result.scene,
             failure_signature=result.failure_signature,

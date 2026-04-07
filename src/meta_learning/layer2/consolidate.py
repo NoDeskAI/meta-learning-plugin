@@ -198,7 +198,7 @@ class Consolidator:
             if days_old <= 0:
                 continue
             decay_factor = decay_base**days_old
-            decayed = exp.confidence * decay_factor
+            decayed = exp.initial_confidence * decay_factor
             if decayed != exp.confidence:
                 exp.confidence = max(decayed, 0.0)
                 write_experience(exp, self._config)

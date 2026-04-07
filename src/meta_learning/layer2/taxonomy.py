@@ -171,7 +171,8 @@ class TaxonomyBuilder:
                 trigger=extraction.trigger,
                 fix_sop=extraction.fix_sop,
                 prevention=extraction.prevention,
-                confidence=_compute_cluster_confidence(experiences),
+                confidence=_compute_base_confidence(experiences),
+                confidence_adjustment=0.0,
                 source_exps=[e.id for e in experiences],
                 keywords=extraction.keywords,
                 created_at=date.today(),
@@ -247,7 +248,7 @@ def _make_prefix(domain: str, subdomain: str) -> str:
     return f"{d}-{s}"
 
 
-def _compute_cluster_confidence(experiences: list[Experience]) -> float:
+def _compute_base_confidence(experiences: list[Experience]) -> float:
     if not experiences:
         return 0.6
     avg_conf = sum(e.confidence for e in experiences) / len(experiences)

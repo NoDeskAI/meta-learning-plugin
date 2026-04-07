@@ -68,6 +68,7 @@ class Experience(BaseModel):
     source_signal: str
     source_session: str | None = None
     source_memory: date | None = None
+    initial_confidence: float = 0.6
     confidence: float = 0.6
     verification_count: int = 1
     scene: str
@@ -99,6 +100,7 @@ class TaxonomyEntry(BaseModel):
     fix_sop: str
     prevention: str
     confidence: float
+    confidence_adjustment: float = 0.0
     source_exps: list[str]
     keywords: list[str] = Field(default_factory=list)
     created_at: date
@@ -125,6 +127,14 @@ class ErrorTaxonomy(BaseModel):
 
     def add_entry(self, domain: str, subdomain: str, entry: TaxonomyEntry) -> None:
         self.taxonomy.setdefault(domain, {}).setdefault(subdomain, []).append(entry)
+
+    def find_entry(self, entry_id: str) -> TaxonomyEntry | None:
+        for domain in self.taxonomy.values():
+            for entries in domain.values():
+                for entry in entries:
+                    if entry.id == entry_id:
+                        return entry
+        return None
 
     def remove_entry(self, entry_id: str) -> bool:
         for domain in self.taxonomy.values():
@@ -178,10 +188,7 @@ class MaterializeConfig(BaseModel):
 
 class ConsolidateConfig(BaseModel):
     min_cluster_size_for_taxonomy: int = 2
-    use_llm_clustering: bool = True
-    max_llm_calls_per_group: int = 50
     similarity_threshold: float = 0.3
-    batch_size: int = 10
 
 
 class TaxonomyConfig(BaseModel):
@@ -301,8 +308,6 @@ class SkillUpdateAction(StrEnum):
     APPEND = "append"
     REPLACE = "replace"
     CREATE = "create"
-    MERGE = "merge"
-    SPLIT = "split"
     NONE = "none"
 
 

@@ -1,5 +1,6 @@
 from __future__ import annotations
 
+import logging
 from pathlib import Path
 
 from meta_learning.shared.llm import LLMInterface
@@ -9,6 +10,8 @@ from meta_learning.shared.models import (
     SkillUpdateAction,
     TaxonomyEntry,
 )
+
+logger = logging.getLogger(__name__)
 
 
 class SkillEvolver:
@@ -22,8 +25,28 @@ class SkillEvolver:
         if not new_entries:
             return []
 
+        tax_cfg = self._config.layer2.taxonomy
+        min_conf = tax_cfg.min_confidence_for_skill
+        min_exps = tax_cfg.min_source_exps_for_skill
+
         results: list[SkillEvolveResult] = []
         for entry in new_entries:
+            if entry.confidence < min_conf or len(entry.source_exps) < min_exps:
+                logger.info(
+                    "Skipping skill evolve for %s: confidence=%.2f (min %.2f), "
+                    "source_exps=%d (min %d)",
+                    entry.id,
+                    entry.confidence,
+                    min_conf,
+                    len(entry.source_exps),
+                    min_exps,
+                )
+                results.append(SkillEvolveResult(
+                    action=SkillUpdateAction.NONE,
+                    changes_description="gated: below confidence/experience threshold",
+                ))
+                continue
+
             existing_content = self._find_matching_skill(entry)
             result = await self._llm.evaluate_skill_update(entry, existing_content)
 
