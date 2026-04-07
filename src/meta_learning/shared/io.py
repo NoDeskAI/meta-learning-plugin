@@ -265,6 +265,8 @@ _META_LEARNING_TOOLS = frozenset({
     "mcp_meta-learning_status",
     "mcp_meta-learning_layer2_status",
     "mcp_meta-learning_sync_taxonomy_to_nobot",
+    "mcp_meta-learning_confirm_taxonomy_entry",
+    "mcp_meta-learning_contradict_taxonomy_entry",
     "capture_signal",
     "quick_think",
     "run_layer2",
@@ -272,6 +274,8 @@ _META_LEARNING_TOOLS = frozenset({
     "status",
     "layer2_status",
     "sync_taxonomy_to_nobot",
+    "confirm_taxonomy_entry",
+    "contradict_taxonomy_entry",
 })
 
 
@@ -443,6 +447,54 @@ def next_taxonomy_id(taxonomy: ErrorTaxonomy, domain_prefix: str) -> str:
     ]
     next_num = len(existing) + 1
     return f"tax-{domain_prefix}-{next_num:03d}"
+
+
+def boost_taxonomy_confidence(
+    entry_id: str,
+    config: MetaLearningConfig,
+    max_adjustment: float = 0.4,
+) -> TaxonomyEntry | None:
+    """Increase a taxonomy entry's confidence adjustment after positive validation."""
+    from datetime import date as _date
+
+    taxonomy = load_error_taxonomy(config)
+    entry = taxonomy.find_entry(entry_id)
+    if entry is None:
+        return None
+
+    boost = config.confidence.hit_success_boost
+    new_adj = min(entry.confidence_adjustment + boost, max_adjustment)
+    delta = new_adj - entry.confidence_adjustment
+    entry.confidence_adjustment = new_adj
+    entry.confidence = max(0.0, min(entry.confidence + delta, 1.0))
+    entry.last_verified = _date.today()
+
+    save_error_taxonomy(taxonomy, config)
+    return entry
+
+
+def penalize_taxonomy_confidence(
+    entry_id: str,
+    config: MetaLearningConfig,
+    min_adjustment: float = -0.5,
+) -> TaxonomyEntry | None:
+    """Decrease a taxonomy entry's confidence adjustment after contradiction."""
+    from datetime import date as _date
+
+    taxonomy = load_error_taxonomy(config)
+    entry = taxonomy.find_entry(entry_id)
+    if entry is None:
+        return None
+
+    penalty = config.confidence.contradiction_penalty
+    new_adj = max(entry.confidence_adjustment - penalty, min_adjustment)
+    delta = new_adj - entry.confidence_adjustment
+    entry.confidence_adjustment = new_adj
+    entry.confidence = max(0.0, min(entry.confidence + delta, 1.0))
+    entry.last_verified = _date.today()
+
+    save_error_taxonomy(taxonomy, config)
+    return entry
 
 
 def save_layer3_result(result: Layer3Result, config: MetaLearningConfig) -> Path:

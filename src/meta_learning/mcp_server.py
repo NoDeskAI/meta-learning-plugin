@@ -19,11 +19,13 @@ from meta_learning.layer1.quick_think import QuickThinkIndex
 from meta_learning.layer1.signal_capture import SignalCapture
 from meta_learning.layer2.consolidate import bootstrap_multimodal_embedding
 from meta_learning.shared.io import (
+    boost_taxonomy_confidence,
     enrich_from_session,
     list_all_experiences,
     list_pending_signals,
     load_config,
     load_error_taxonomy,
+    penalize_taxonomy_confidence,
 )
 from meta_learning.shared.models import (
     ErrorTaxonomy,
@@ -523,6 +525,50 @@ def status() -> str:
             )
 
     return "\n".join(lines)
+
+
+@mcp.tool()
+def confirm_taxonomy_entry(entry_id: str) -> str:
+    """Report that a taxonomy entry's advice was helpful during a task.
+
+    Increases the entry's confidence adjustment (capped at +0.4).
+    Call this when following a risk-assessment suggestion led to a
+    successful outcome.
+
+    Args:
+        entry_id: The taxonomy entry ID (e.g. "tax-cod-typ-001").
+    """
+    config = _get_config()
+    entry = boost_taxonomy_confidence(entry_id, config)
+    if entry is None:
+        return f"Taxonomy entry '{entry_id}' not found."
+    return (
+        f"Boosted [{entry.id}] {entry.name}: "
+        f"confidence={entry.confidence:.2f} "
+        f"(adjustment={entry.confidence_adjustment:+.2f})"
+    )
+
+
+@mcp.tool()
+def contradict_taxonomy_entry(entry_id: str) -> str:
+    """Report that a taxonomy entry's advice was wrong or harmful.
+
+    Decreases the entry's confidence adjustment (floored at -0.5).
+    Call this when following a risk-assessment suggestion led to a
+    worse outcome or was irrelevant.
+
+    Args:
+        entry_id: The taxonomy entry ID (e.g. "tax-cod-typ-001").
+    """
+    config = _get_config()
+    entry = penalize_taxonomy_confidence(entry_id, config)
+    if entry is None:
+        return f"Taxonomy entry '{entry_id}' not found."
+    return (
+        f"Penalized [{entry.id}] {entry.name}: "
+        f"confidence={entry.confidence:.2f} "
+        f"(adjustment={entry.confidence_adjustment:+.2f})"
+    )
 
 
 # ---------------------------------------------------------------------------
