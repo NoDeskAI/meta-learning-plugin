@@ -67,6 +67,8 @@ def _select_diverse_top_n(
     for entry in sorted_entries:
         if len(selected) >= max_rules:
             break
+        if not _entry_rule_text(entry):
+            continue
         tokens = _entry_topic_tokens(entry)
         if not tokens:
             continue
@@ -104,6 +106,11 @@ def _render_skill_md(entries: list[TaxonomyEntry], max_rules: int = 10) -> str:
     return _render_skill_md_from_selected(top)
 
 
+def _entry_rule_text(entry: TaxonomyEntry) -> str:
+    """Best available one-liner for an entry: prevention > fix_sop > trigger."""
+    return entry.prevention or entry.fix_sop or entry.trigger
+
+
 def _render_skill_md_from_selected(selected: list[TaxonomyEntry]) -> str:
     lines = [
         "---",
@@ -116,7 +123,9 @@ def _render_skill_md_from_selected(selected: list[TaxonomyEntry]) -> str:
         "You have learned the following rules from past interactions:",
     ]
     for entry in selected:
-        lines.append(f"- {entry.prevention}")
+        text = _entry_rule_text(entry)
+        if text:
+            lines.append(f"- {text}")
 
     lines.append("")
     lines.append("## When to call meta-learning tools")
@@ -130,9 +139,9 @@ def _render_skill_md_from_selected(selected: list[TaxonomyEntry]) -> str:
 
 
 def _render_category_md(category: str, entries: list[TaxonomyEntry]) -> str:
-    sorted_entries = sorted(entries, key=lambda e: e.confidence, reverse=True)
+    deduped = _select_diverse_top_n(entries, max_rules=len(entries))
     lines = [f"# {category.replace('-', ' ').title()}", ""]
-    for entry in sorted_entries:
+    for entry in deduped:
         lines.append(f"## {entry.name}")
         lines.append(f"**Trigger:** {entry.trigger}")
         lines.append(f"**Prevention:** {entry.prevention}")
