@@ -22,3 +22,4 @@ abtest/results/
 .cursor/plans/
 logs/
 uv.lock
+.DS_Store

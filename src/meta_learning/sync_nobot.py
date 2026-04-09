@@ -101,6 +101,16 @@ def _classify_entry(entry: TaxonomyEntry) -> str:
     return best_cat
 
 
+def render_bootstrap_skill_md() -> str:
+    """Render a SKILL.md with no learned rules — only tool-calling instructions.
+
+    Deploy this during installation or cleanup to bootstrap the learning loop:
+    without it, the agent never calls ``capture_signal``, so the first SKILL.md
+    is never generated (chicken-and-egg problem).
+    """
+    return _render_skill_md_from_selected([])
+
+
 def _render_skill_md(entries: list[TaxonomyEntry], max_rules: int = 10) -> str:
     top = _select_diverse_top_n(entries, max_rules)
     return _render_skill_md_from_selected(top)

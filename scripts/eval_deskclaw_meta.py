@@ -45,8 +45,11 @@ from typing import Any
 
 import httpx
 
+import sys
+
 SCRIPT_DIR = Path(__file__).resolve().parent
 PROJECT_ROOT = SCRIPT_DIR.parent
+sys.path.insert(0, str(PROJECT_ROOT / "src"))
 
 logging.basicConfig(
     level=logging.INFO,
@@ -110,11 +113,18 @@ class DeskClawClient:
     async def wait_learning_done(
         self, timeout: float = 180, after_ts: float | None = None,
     ) -> bool:
-        """Poll layer2_state.json until status == completed."""
+        """Poll layer2_state.json and SKILL.md until learning is fully applied.
+
+        Returns True only when layer2 status == completed AND the nanobot
+        SKILL.md has been updated (mtime > after_ts), meaning sync_nobot
+        ran and the agent will see the new rules in subsequent sessions.
+        """
         state_path = META_DATA_DIR / "signal_buffer" / "layer2_state.json"
+        skill_path = NANOBOT_SKILLS_DIR / "meta-learning" / "SKILL.md"
         deadline = time.time() + timeout
+        layer2_done = False
         while time.time() < deadline:
-            if state_path.exists():
+            if not layer2_done and state_path.exists():
                 if after_ts and state_path.stat().st_mtime < after_ts:
                     await asyncio.sleep(3)
                     continue
@@ -123,14 +133,26 @@ class DeskClawClient:
                     status = data.get("status", "")
                     if status == "completed":
                         logger.info("    layer2 pipeline completed")
-                        return True
-                    if status == "running":
+                        layer2_done = True
+                    elif status == "running":
                         logger.debug("    layer2 still running …")
                 except (json.JSONDecodeError, OSError):
                     pass
+
+            if layer2_done:
+                if skill_path.exists() and (
+                    not after_ts or skill_path.stat().st_mtime > after_ts
+                ):
+                    logger.info("    SKILL.md updated — learning fully applied")
+                    return True
+                logger.debug("    layer2 done, waiting for SKILL.md sync …")
+
             await asyncio.sleep(3)
-        logger.warning("    layer2 pipeline timed out after %.0fs", timeout)
-        return False
+        if layer2_done:
+            logger.warning("    layer2 completed but SKILL.md not updated within %.0fs", timeout)
+        else:
+            logger.warning("    layer2 pipeline timed out after %.0fs", timeout)
+        return layer2_done
 
     async def close(self):
         await self._client.aclose()
@@ -713,6 +735,21 @@ async def llm_judge(
 # Pipeline Artifact Verification (Teaching Phase)
 # =====================================================================
 
+def _skill_has_learned_rules(content: str) -> bool:
+    """True if SKILL.md contains actual learned rules (not just bootstrap)."""
+    in_rules_section = False
+    for line in content.splitlines():
+        if line.startswith("# Meta-Learning Rules"):
+            in_rules_section = True
+            continue
+        if in_rules_section:
+            if line.startswith("#"):
+                break
+            if line.startswith("- "):
+                return True
+    return False
+
+
 def check_pipeline_artifacts(verify_keywords: list[str] | None = None) -> dict[str, Any]:
     """Check that the meta-learning pipeline produced expected artifacts."""
     results: dict[str, Any] = {}
@@ -728,16 +765,16 @@ def check_pipeline_artifacts(verify_keywords: list[str] | None = None) -> dict[s
     )
 
     skill_path = NANOBOT_SKILLS_DIR / "meta-learning" / "SKILL.md"
-    results["skill_updated"] = (
-        skill_path.exists() and skill_path.stat().st_size > 10
-    )
-
     skill_content = ""
     if skill_path.exists():
         try:
             skill_content = skill_path.read_text()
         except OSError:
             pass
+
+    has_rules = _skill_has_learned_rules(skill_content)
+    results["skill_updated"] = has_rules
+    results["skill_is_bootstrap"] = skill_path.exists() and not has_rules
     results["skill_content_preview"] = skill_content[:500]
 
     if verify_keywords and skill_content:
@@ -772,6 +809,15 @@ def check_pipeline_artifacts(verify_keywords: list[str] | None = None) -> dict[s
 # Cleanup Utilities
 # =====================================================================
 
+def _write_bootstrap_skill_md():
+    """Write a bootstrap SKILL.md so the agent knows to call capture_signal."""
+    from meta_learning.sync_nobot import render_bootstrap_skill_md
+
+    skill_dir = NANOBOT_SKILLS_DIR / "meta-learning"
+    skill_dir.mkdir(parents=True, exist_ok=True)
+    (skill_dir / "SKILL.md").write_text(render_bootstrap_skill_md(), encoding="utf-8")
+
+
 def _cleanup_meta_state():
     """Clear signal_buffer, taxonomy, skills, and layer2 state for a fresh scenario."""
     signal_dir = META_DATA_DIR / "signal_buffer"
@@ -799,11 +845,9 @@ def _cleanup_meta_state():
         shutil.rmtree(skills_dir, ignore_errors=True)
         skills_dir.mkdir(parents=True, exist_ok=True)
 
-    nanobot_skill = NANOBOT_SKILLS_DIR / "meta-learning" / "SKILL.md"
-    if nanobot_skill.exists():
-        nanobot_skill.unlink(missing_ok=True)
+    _write_bootstrap_skill_md()
 
-    logger.info("  Meta-learning state cleaned")
+    logger.info("  Meta-learning state cleaned (bootstrap SKILL.md deployed)")
 
 
 def _extract_response_text(resp: dict[str, Any]) -> str:

@@ -63,6 +63,21 @@ else
     echo "Config already exists at ${DATA_DIR}/config.yaml — skipping."
 fi
 
+# ---------- bootstrap SKILL.md ----------
+
+SKILL_DIR="${WORKSPACE}/skills/meta-learning"
+SKILL_PATH="${SKILL_DIR}/SKILL.md"
+
+if [ ! -f "${SKILL_PATH}" ]; then
+    mkdir -p "${SKILL_DIR}"
+    "${SCRIPT_DIR}/.venv/bin/python" -c \
+        "from meta_learning.sync_nobot import render_bootstrap_skill_md; print(render_bootstrap_skill_md(), end='')" \
+        > "${SKILL_PATH}"
+    echo "Created bootstrap SKILL.md at ${SKILL_PATH}"
+else
+    echo "SKILL.md already exists at ${SKILL_PATH} — skipping."
+fi
+
 # ---------- output MCP registration ----------
 
 VENV_PYTHON="${SCRIPT_DIR}/.venv/bin/python"
