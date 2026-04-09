@@ -1,0 +1,691 @@
+<!DOCTYPE html>
+<!-- saved from url=(0092)file:///Users/yumeng/Documents/Projects/lingmin-meta-learning/docs/pipeline_rl_training.html -->
+<html lang="zh-CN"><head><meta http-equiv="Content-Type" content="text/html; charset=UTF-8">
+
+<meta name="viewport" content="width=device-width, initial-scale=1.0">
+<title>RL 训练链路 — GRPO + SAVR</title>
+<script src="./RL 训练链路 — GRPO + SAVR_files/saved_resource"></script>
+<link href="./RL 训练链路 — GRPO + SAVR_files/css2" rel="stylesheet">
+<script>
+tailwind.config = {
+  theme: {
+    extend: {
+      fontFamily: { sans: ['Fira Sans', 'sans-serif'], mono: ['Fira Code', 'monospace'] },
+    }
+  }
+}
+</script>
+<style>
+  .connector { height: 32px; width: 2px; background: #cbd5e1; margin: 0 auto; position: relative; }
+  .connector::after {
+    content: ''; position: absolute; left: 50%; bottom: 0; transform: translateX(-50%);
+    border-left: 6px solid transparent; border-right: 6px solid transparent; border-top: 7px solid #cbd5e1;
+  }
+  .card { transition: all 200ms ease; }
+  .card:hover { transform: translateY(-2px); box-shadow: 0 8px 25px -5px rgba(0,0,0,.1); }
+  details summary { cursor: pointer; }
+  details summary::-webkit-details-marker { display: none; }
+  .formula { font-family: 'Fira Code', monospace; background: #f8fafc; border: 1px solid #e2e8f0; border-radius: 8px; padding: 12px 16px; }
+</style>
+<style>*, ::before, ::after{--tw-border-spacing-x:0;--tw-border-spacing-y:0;--tw-translate-x:0;--tw-translate-y:0;--tw-rotate:0;--tw-skew-x:0;--tw-skew-y:0;--tw-scale-x:1;--tw-scale-y:1;--tw-pan-x: ;--tw-pan-y: ;--tw-pinch-zoom: ;--tw-scroll-snap-strictness:proximity;--tw-gradient-from-position: ;--tw-gradient-via-position: ;--tw-gradient-to-position: ;--tw-ordinal: ;--tw-slashed-zero: ;--tw-numeric-figure: ;--tw-numeric-spacing: ;--tw-numeric-fraction: ;--tw-ring-inset: ;--tw-ring-offset-width:0px;--tw-ring-offset-color:#fff;--tw-ring-color:rgb(59 130 246 / 0.5);--tw-ring-offset-shadow:0 0 #0000;--tw-ring-shadow:0 0 #0000;--tw-shadow:0 0 #0000;--tw-shadow-colored:0 0 #0000;--tw-blur: ;--tw-brightness: ;--tw-contrast: ;--tw-grayscale: ;--tw-hue-rotate: ;--tw-invert: ;--tw-saturate: ;--tw-sepia: ;--tw-drop-shadow: ;--tw-backdrop-blur: ;--tw-backdrop-brightness: ;--tw-backdrop-contrast: ;--tw-backdrop-grayscale: ;--tw-backdrop-hue-rotate: ;--tw-backdrop-invert: ;--tw-backdrop-opacity: ;--tw-backdrop-saturate: ;--tw-backdrop-sepia: ;--tw-contain-size: ;--tw-contain-layout: ;--tw-contain-paint: ;--tw-contain-style: }::backdrop{--tw-border-spacing-x:0;--tw-border-spacing-y:0;--tw-translate-x:0;--tw-translate-y:0;--tw-rotate:0;--tw-skew-x:0;--tw-skew-y:0;--tw-scale-x:1;--tw-scale-y:1;--tw-pan-x: ;--tw-pan-y: ;--tw-pinch-zoom: ;--tw-scroll-snap-strictness:proximity;--tw-gradient-from-position: ;--tw-gradient-via-position: ;--tw-gradient-to-position: ;--tw-ordinal: ;--tw-slashed-zero: ;--tw-numeric-figure: ;--tw-numeric-spacing: ;--tw-numeric-fraction: ;--tw-ring-inset: ;--tw-ring-offset-width:0px;--tw-ring-offset-color:#fff;--tw-ring-color:rgb(59 130 246 / 0.5);--tw-ring-offset-shadow:0 0 #0000;--tw-ring-shadow:0 0 #0000;--tw-shadow:0 0 #0000;--tw-shadow-colored:0 0 #0000;--tw-blur: ;--tw-brightness: ;--tw-contrast: ;--tw-grayscale: ;--tw-hue-rotate: ;--tw-invert: ;--tw-saturate: ;--tw-sepia: ;--tw-drop-shadow: ;--tw-backdrop-blur: ;--tw-backdrop-brightness: ;--tw-backdrop-contrast: ;--tw-backdrop-grayscale: ;--tw-backdrop-hue-rotate: ;--tw-backdrop-invert: ;--tw-backdrop-opacity: ;--tw-backdrop-saturate: ;--tw-backdrop-sepia: ;--tw-contain-size: ;--tw-contain-layout: ;--tw-contain-paint: ;--tw-contain-style: }/* ! tailwindcss v3.4.17 | MIT License | https://tailwindcss.com */*,::after,::before{box-sizing:border-box;border-width:0;border-style:solid;border-color:#e5e7eb}::after,::before{--tw-content:''}:host,html{line-height:1.5;-webkit-text-size-adjust:100%;-moz-tab-size:4;tab-size:4;font-family:Fira Sans, sans-serif;font-feature-settings:normal;font-variation-settings:normal;-webkit-tap-highlight-color:transparent}body{margin:0;line-height:inherit}hr{height:0;color:inherit;border-top-width:1px}abbr:where([title]){-webkit-text-decoration:underline dotted;text-decoration:underline dotted}h1,h2,h3,h4,h5,h6{font-size:inherit;font-weight:inherit}a{color:inherit;text-decoration:inherit}b,strong{font-weight:bolder}code,kbd,pre,samp{font-family:Fira Code, monospace;font-feature-settings:normal;font-variation-settings:normal;font-size:1em}small{font-size:80%}sub,sup{font-size:75%;line-height:0;position:relative;vertical-align:baseline}sub{bottom:-.25em}sup{top:-.5em}table{text-indent:0;border-color:inherit;border-collapse:collapse}button,input,optgroup,select,textarea{font-family:inherit;font-feature-settings:inherit;font-variation-settings:inherit;font-size:100%;font-weight:inherit;line-height:inherit;letter-spacing:inherit;color:inherit;margin:0;padding:0}button,select{text-transform:none}button,input:where([type=button]),input:where([type=reset]),input:where([type=submit]){-webkit-appearance:button;background-color:transparent;background-image:none}:-moz-focusring{outline:auto}:-moz-ui-invalid{box-shadow:none}progress{vertical-align:baseline}::-webkit-inner-spin-button,::-webkit-outer-spin-button{height:auto}[type=search]{-webkit-appearance:textfield;outline-offset:-2px}::-webkit-search-decoration{-webkit-appearance:none}::-webkit-file-upload-button{-webkit-appearance:button;font:inherit}summary{display:list-item}blockquote,dd,dl,figure,h1,h2,h3,h4,h5,h6,hr,p,pre{margin:0}fieldset{margin:0;padding:0}legend{padding:0}menu,ol,ul{list-style:none;margin:0;padding:0}dialog{padding:0}textarea{resize:vertical}input::placeholder,textarea::placeholder{opacity:1;color:#9ca3af}[role=button],button{cursor:pointer}:disabled{cursor:default}audio,canvas,embed,iframe,img,object,svg,video{display:block;vertical-align:middle}img,video{max-width:100%;height:auto}[hidden]:where(:not([hidden=until-found])){display:none}.absolute{position:absolute}.relative{position:relative}.-right-2{right:-0.5rem}.-top-2{top:-0.5rem}.mx-auto{margin-left:auto;margin-right:auto}.mb-1{margin-bottom:0.25rem}.mb-10{margin-bottom:2.5rem}.mb-2{margin-bottom:0.5rem}.mb-3{margin-bottom:0.75rem}.mb-4{margin-bottom:1rem}.mb-5{margin-bottom:1.25rem}.mb-6{margin-bottom:1.5rem}.mb-8{margin-bottom:2rem}.mt-0\.5{margin-top:0.125rem}.mt-1{margin-top:0.25rem}.mt-2{margin-top:0.5rem}.mt-3{margin-top:0.75rem}.mt-4{margin-top:1rem}.inline-block{display:inline-block}.flex{display:flex}.inline-flex{display:inline-flex}.grid{display:grid}.hidden{display:none}.h-4{height:1rem}.h-5{height:1.25rem}.h-6{height:1.5rem}.h-8{height:2rem}.h-9{height:2.25rem}.w-10{width:2.5rem}.w-20{width:5rem}.w-4{width:1rem}.w-48{width:12rem}.w-5{width:1.25rem}.w-52{width:13rem}.w-56{width:14rem}.w-8{width:2rem}.w-9{width:2.25rem}.w-full{width:100%}.max-w-5xl{max-width:64rem}.flex-shrink-0{flex-shrink:0}.cursor-pointer{cursor:pointer}.grid-cols-1{grid-template-columns:repeat(1, minmax(0, 1fr))}.grid-cols-5{grid-template-columns:repeat(5, minmax(0, 1fr))}.flex-wrap{flex-wrap:wrap}.items-center{align-items:center}.justify-center{justify-content:center}.justify-between{justify-content:space-between}.gap-1{gap:0.25rem}.gap-1\.5{gap:0.375rem}.gap-2{gap:0.5rem}.gap-3{gap:0.75rem}.gap-4{gap:1rem}.space-y-0\.5 > :not([hidden]) ~ :not([hidden]){--tw-space-y-reverse:0;margin-top:calc(0.125rem * calc(1 - var(--tw-space-y-reverse)));margin-bottom:calc(0.125rem * var(--tw-space-y-reverse))}.space-y-1 > :not([hidden]) ~ :not([hidden]){--tw-space-y-reverse:0;margin-top:calc(0.25rem * calc(1 - var(--tw-space-y-reverse)));margin-bottom:calc(0.25rem * var(--tw-space-y-reverse))}.space-y-1\.5 > :not([hidden]) ~ :not([hidden]){--tw-space-y-reverse:0;margin-top:calc(0.375rem * calc(1 - var(--tw-space-y-reverse)));margin-bottom:calc(0.375rem * var(--tw-space-y-reverse))}.space-y-2 > :not([hidden]) ~ :not([hidden]){--tw-space-y-reverse:0;margin-top:calc(0.5rem * calc(1 - var(--tw-space-y-reverse)));margin-bottom:calc(0.5rem * var(--tw-space-y-reverse))}.space-y-3 > :not([hidden]) ~ :not([hidden]){--tw-space-y-reverse:0;margin-top:calc(0.75rem * calc(1 - var(--tw-space-y-reverse)));margin-bottom:calc(0.75rem * var(--tw-space-y-reverse))}.overflow-hidden{overflow:hidden}.overflow-x-auto{overflow-x:auto}.rounded{border-radius:0.25rem}.rounded-2xl{border-radius:1rem}.rounded-full{border-radius:9999px}.rounded-lg{border-radius:0.5rem}.rounded-xl{border-radius:0.75rem}.border{border-width:1px}.border-2{border-width:2px}.border-b{border-bottom-width:1px}.border-b-2{border-bottom-width:2px}.border-amber-200{--tw-border-opacity:1;border-color:rgb(253 230 138 / var(--tw-border-opacity, 1))}.border-amber-300{--tw-border-opacity:1;border-color:rgb(252 211 77 / var(--tw-border-opacity, 1))}.border-amber-400{--tw-border-opacity:1;border-color:rgb(251 191 36 / var(--tw-border-opacity, 1))}.border-amber-500{--tw-border-opacity:1;border-color:rgb(245 158 11 / var(--tw-border-opacity, 1))}.border-blue-100{--tw-border-opacity:1;border-color:rgb(219 234 254 / var(--tw-border-opacity, 1))}.border-blue-400{--tw-border-opacity:1;border-color:rgb(96 165 250 / var(--tw-border-opacity, 1))}.border-emerald-200{--tw-border-opacity:1;border-color:rgb(167 243 208 / var(--tw-border-opacity, 1))}.border-green-200{--tw-border-opacity:1;border-color:rgb(187 247 208 / var(--tw-border-opacity, 1))}.border-green-400{--tw-border-opacity:1;border-color:rgb(74 222 128 / var(--tw-border-opacity, 1))}.border-purple-200{--tw-border-opacity:1;border-color:rgb(233 213 255 / var(--tw-border-opacity, 1))}.border-purple-300{--tw-border-opacity:1;border-color:rgb(216 180 254 / var(--tw-border-opacity, 1))}.border-red-300{--tw-border-opacity:1;border-color:rgb(252 165 165 / var(--tw-border-opacity, 1))}.border-slate-100{--tw-border-opacity:1;border-color:rgb(241 245 249 / var(--tw-border-opacity, 1))}.border-slate-200{--tw-border-opacity:1;border-color:rgb(226 232 240 / var(--tw-border-opacity, 1))}.border-slate-300{--tw-border-opacity:1;border-color:rgb(203 213 225 / var(--tw-border-opacity, 1))}.border-teal-100{--tw-border-opacity:1;border-color:rgb(204 251 241 / var(--tw-border-opacity, 1))}.border-teal-400{--tw-border-opacity:1;border-color:rgb(45 212 191 / var(--tw-border-opacity, 1))}.border-violet-200{--tw-border-opacity:1;border-color:rgb(221 214 254 / var(--tw-border-opacity, 1))}.border-violet-500{--tw-border-opacity:1;border-color:rgb(139 92 246 / var(--tw-border-opacity, 1))}.bg-amber-100{--tw-bg-opacity:1;background-color:rgb(254 243 199 / var(--tw-bg-opacity, 1))}.bg-amber-50{--tw-bg-opacity:1;background-color:rgb(255 251 235 / var(--tw-bg-opacity, 1))}.bg-amber-500{--tw-bg-opacity:1;background-color:rgb(245 158 11 / var(--tw-bg-opacity, 1))}.bg-blue-100{--tw-bg-opacity:1;background-color:rgb(219 234 254 / var(--tw-bg-opacity, 1))}.bg-blue-50{--tw-bg-opacity:1;background-color:rgb(239 246 255 / var(--tw-bg-opacity, 1))}.bg-blue-50\/50{background-color:rgb(239 246 255 / 0.5)}.bg-blue-500{--tw-bg-opacity:1;background-color:rgb(59 130 246 / var(--tw-bg-opacity, 1))}.bg-emerald-50{--tw-bg-opacity:1;background-color:rgb(236 253 245 / var(--tw-bg-opacity, 1))}.bg-emerald-600{--tw-bg-opacity:1;background-color:rgb(5 150 105 / var(--tw-bg-opacity, 1))}.bg-green-100{--tw-bg-opacity:1;background-color:rgb(220 252 231 / var(--tw-bg-opacity, 1))}.bg-green-50{--tw-bg-opacity:1;background-color:rgb(240 253 244 / var(--tw-bg-opacity, 1))}.bg-green-50\/50{background-color:rgb(240 253 244 / 0.5)}.bg-green-600{--tw-bg-opacity:1;background-color:rgb(22 163 74 / var(--tw-bg-opacity, 1))}.bg-purple-100{--tw-bg-opacity:1;background-color:rgb(243 232 255 / var(--tw-bg-opacity, 1))}.bg-purple-50{--tw-bg-opacity:1;background-color:rgb(250 245 255 / var(--tw-bg-opacity, 1))}.bg-purple-500{--tw-bg-opacity:1;background-color:rgb(168 85 247 / var(--tw-bg-opacity, 1))}.bg-purple-600{--tw-bg-opacity:1;background-color:rgb(147 51 234 / var(--tw-bg-opacity, 1))}.bg-red-100{--tw-bg-opacity:1;background-color:rgb(254 226 226 / var(--tw-bg-opacity, 1))}.bg-red-50{--tw-bg-opacity:1;background-color:rgb(254 242 242 / var(--tw-bg-opacity, 1))}.bg-slate-100{--tw-bg-opacity:1;background-color:rgb(241 245 249 / var(--tw-bg-opacity, 1))}.bg-slate-200{--tw-bg-opacity:1;background-color:rgb(226 232 240 / var(--tw-bg-opacity, 1))}.bg-slate-50{--tw-bg-opacity:1;background-color:rgb(248 250 252 / var(--tw-bg-opacity, 1))}.bg-slate-600{--tw-bg-opacity:1;background-color:rgb(71 85 105 / var(--tw-bg-opacity, 1))}.bg-slate-900{--tw-bg-opacity:1;background-color:rgb(15 23 42 / var(--tw-bg-opacity, 1))}.bg-teal-100{--tw-bg-opacity:1;background-color:rgb(204 251 241 / var(--tw-bg-opacity, 1))}.bg-teal-50{--tw-bg-opacity:1;background-color:rgb(240 253 250 / var(--tw-bg-opacity, 1))}.bg-violet-100{--tw-bg-opacity:1;background-color:rgb(237 233 254 / var(--tw-bg-opacity, 1))}.bg-violet-50{--tw-bg-opacity:1;background-color:rgb(245 243 255 / var(--tw-bg-opacity, 1))}.bg-violet-600{--tw-bg-opacity:1;background-color:rgb(124 58 237 / var(--tw-bg-opacity, 1))}.bg-violet-700{--tw-bg-opacity:1;background-color:rgb(109 40 217 / var(--tw-bg-opacity, 1))}.bg-white{--tw-bg-opacity:1;background-color:rgb(255 255 255 / var(--tw-bg-opacity, 1))}.bg-white\/10{background-color:rgb(255 255 255 / 0.1)}.bg-white\/20{background-color:rgb(255 255 255 / 0.2)}.p-1{padding:0.25rem}.p-2{padding:0.5rem}.p-3{padding:0.75rem}.p-4{padding:1rem}.p-5{padding:1.25rem}.p-6{padding:1.5rem}.px-2{padding-left:0.5rem;padding-right:0.5rem}.px-3{padding-left:0.75rem;padding-right:0.75rem}.px-5{padding-left:1.25rem;padding-right:1.25rem}.px-6{padding-left:1.5rem;padding-right:1.5rem}.py-0\.5{padding-top:0.125rem;padding-bottom:0.125rem}.py-1{padding-top:0.25rem;padding-bottom:0.25rem}.py-1\.5{padding-top:0.375rem;padding-bottom:0.375rem}.py-10{padding-top:2.5rem;padding-bottom:2.5rem}.py-2{padding-top:0.5rem;padding-bottom:0.5rem}.py-3{padding-top:0.75rem;padding-bottom:0.75rem}.py-4{padding-top:1rem;padding-bottom:1rem}.pl-3{padding-left:0.75rem}.pr-3{padding-right:0.75rem}.text-left{text-align:left}.text-center{text-align:center}.font-mono{font-family:Fira Code, monospace}.text-3xl{font-size:1.875rem;line-height:2.25rem}.text-\[10px\]{font-size:10px}.text-\[11px\]{font-size:11px}.text-\[9px\]{font-size:9px}.text-base{font-size:1rem;line-height:1.5rem}.text-lg{font-size:1.125rem;line-height:1.75rem}.text-sm{font-size:0.875rem;line-height:1.25rem}.text-xl{font-size:1.25rem;line-height:1.75rem}.text-xs{font-size:0.75rem;line-height:1rem}.font-bold{font-weight:700}.font-medium{font-weight:500}.font-semibold{font-weight:600}.text-amber-600{--tw-text-opacity:1;color:rgb(217 119 6 / var(--tw-text-opacity, 1))}.text-amber-700{--tw-text-opacity:1;color:rgb(180 83 9 / var(--tw-text-opacity, 1))}.text-amber-800{--tw-text-opacity:1;color:rgb(146 64 14 / var(--tw-text-opacity, 1))}.text-blue-600{--tw-text-opacity:1;color:rgb(37 99 235 / var(--tw-text-opacity, 1))}.text-blue-700{--tw-text-opacity:1;color:rgb(29 78 216 / var(--tw-text-opacity, 1))}.text-blue-800{--tw-text-opacity:1;color:rgb(30 64 175 / var(--tw-text-opacity, 1))}.text-emerald-500{--tw-text-opacity:1;color:rgb(16 185 129 / var(--tw-text-opacity, 1))}.text-green-600{--tw-text-opacity:1;color:rgb(22 163 74 / var(--tw-text-opacity, 1))}.text-green-700{--tw-text-opacity:1;color:rgb(21 128 61 / var(--tw-text-opacity, 1))}.text-green-800{--tw-text-opacity:1;color:rgb(22 101 52 / var(--tw-text-opacity, 1))}.text-purple-100{--tw-text-opacity:1;color:rgb(243 232 255 / var(--tw-text-opacity, 1))}.text-purple-400{--tw-text-opacity:1;color:rgb(192 132 252 / var(--tw-text-opacity, 1))}.text-purple-600{--tw-text-opacity:1;color:rgb(147 51 234 / var(--tw-text-opacity, 1))}.text-purple-700{--tw-text-opacity:1;color:rgb(126 34 206 / var(--tw-text-opacity, 1))}.text-red-500{--tw-text-opacity:1;color:rgb(239 68 68 / var(--tw-text-opacity, 1))}.text-red-600{--tw-text-opacity:1;color:rgb(220 38 38 / var(--tw-text-opacity, 1))}.text-slate-300{--tw-text-opacity:1;color:rgb(203 213 225 / var(--tw-text-opacity, 1))}.text-slate-400{--tw-text-opacity:1;color:rgb(148 163 184 / var(--tw-text-opacity, 1))}.text-slate-500{--tw-text-opacity:1;color:rgb(100 116 139 / var(--tw-text-opacity, 1))}.text-slate-600{--tw-text-opacity:1;color:rgb(71 85 105 / var(--tw-text-opacity, 1))}.text-slate-700{--tw-text-opacity:1;color:rgb(51 65 85 / var(--tw-text-opacity, 1))}.text-slate-800{--tw-text-opacity:1;color:rgb(30 41 59 / var(--tw-text-opacity, 1))}.text-slate-900{--tw-text-opacity:1;color:rgb(15 23 42 / var(--tw-text-opacity, 1))}.text-teal-600{--tw-text-opacity:1;color:rgb(13 148 136 / var(--tw-text-opacity, 1))}.text-teal-700{--tw-text-opacity:1;color:rgb(15 118 110 / var(--tw-text-opacity, 1))}.text-teal-800{--tw-text-opacity:1;color:rgb(17 94 89 / var(--tw-text-opacity, 1))}.text-violet-200{--tw-text-opacity:1;color:rgb(221 214 254 / var(--tw-text-opacity, 1))}.text-violet-600{--tw-text-opacity:1;color:rgb(124 58 237 / var(--tw-text-opacity, 1))}.text-violet-700{--tw-text-opacity:1;color:rgb(109 40 217 / var(--tw-text-opacity, 1))}.text-violet-800{--tw-text-opacity:1;color:rgb(91 33 182 / var(--tw-text-opacity, 1))}.text-white{--tw-text-opacity:1;color:rgb(255 255 255 / var(--tw-text-opacity, 1))}.antialiased{-webkit-font-smoothing:antialiased;-moz-osx-font-smoothing:grayscale}@media (min-width: 768px){.md\:col-span-2{grid-column:span 2 / span 2}.md\:grid-cols-2{grid-template-columns:repeat(2, minmax(0, 1fr))}.md\:grid-cols-3{grid-template-columns:repeat(3, minmax(0, 1fr))}.md\:grid-cols-5{grid-template-columns:repeat(5, minmax(0, 1fr))}}@media (min-width: 1024px){.lg\:block{display:block}.lg\:grid-cols-3{grid-template-columns:repeat(3, minmax(0, 1fr))}.lg\:gap-4{gap:1rem}}</style></head>
+<body class="bg-slate-50 text-slate-800 antialiased">
+
+<div class="max-w-5xl mx-auto px-6 py-10">
+
+  <!-- Header -->
+  <header class="mb-10">
+    <h1 class="text-3xl font-bold text-slate-900 mb-2">RL 训练链路</h1>
+    <p class="text-lg text-slate-500">算法: <strong class="text-purple-700">GRPO</strong> + 奖励: <strong class="text-amber-600">SAVR 五组分</strong>（Signal-Adaptive Verifiable Reward）</p>
+    <div class="flex flex-wrap gap-3 mt-4 text-sm">
+      <span class="inline-flex items-center gap-1.5 px-3 py-1 rounded-lg bg-purple-50 border border-purple-200 text-purple-700 font-medium">Qwen3.5-32B-A3B (MoE)</span>
+      <span class="inline-flex items-center gap-1.5 px-3 py-1 rounded-lg bg-slate-100 border border-slate-200 text-slate-600 font-medium">8 x A100 (80GB)</span>
+      <span class="inline-flex items-center gap-1.5 px-3 py-1 rounded-lg bg-slate-100 border border-slate-200 text-slate-600 font-medium">LoRA rank=32</span>
+      <span class="inline-flex items-center gap-1.5 px-3 py-1 rounded-lg bg-amber-50 border border-amber-200 text-amber-700 font-medium">参考: OpenClaw-RL / AReaL / MetaClaw</span>
+    </div>
+  </header>
+
+  <!-- ==================== STEP 1: SFT ==================== -->
+  <section class="mb-2">
+    <div class="flex items-center gap-3 mb-4">
+      <span class="flex-shrink-0 w-9 h-9 rounded-full bg-purple-500 text-white flex items-center justify-center font-bold text-lg">1</span>
+      <div>
+        <h2 class="text-xl font-bold text-slate-900">阶段一：SFT 冷启动</h2>
+        <p class="text-sm text-slate-500">让模型学会输出合法 JSON — 学格式</p>
+      </div>
+    </div>
+
+    <div class="bg-purple-50 border border-purple-200 rounded-2xl p-6">
+      <div class="flex flex-wrap items-center justify-center gap-3 lg:gap-4 mb-4">
+        <div class="card rounded-xl bg-white border border-purple-200 px-5 py-4 text-center w-48">
+          <p class="font-bold text-purple-700 text-sm">输入</p>
+          <p class="text-xs text-slate-500 mt-1">Signal + Session</p>
+        </div>
+        <svg class="hidden lg:block w-8 h-6 text-purple-400 flex-shrink-0" viewBox="0 0 24 16"><path d="M2 8h18m0 0l-5-5m5 5l-5 5" stroke="currentColor" stroke-width="2" fill="none" stroke-linecap="round" stroke-linejoin="round"></path></svg>
+        <div class="card rounded-xl bg-purple-600 text-white px-5 py-4 text-center w-52">
+          <p class="font-bold">Qwen3.5-32B</p>
+          <p class="text-xs text-purple-100 mt-1">LoRA r=32, 3 epochs</p>
+        </div>
+        <svg class="hidden lg:block w-8 h-6 text-purple-400 flex-shrink-0" viewBox="0 0 24 16"><path d="M2 8h18m0 0l-5-5m5 5l-5 5" stroke="currentColor" stroke-width="2" fill="none" stroke-linecap="round" stroke-linejoin="round"></path></svg>
+        <div class="card rounded-xl bg-white border border-purple-200 px-5 py-4 text-center w-48">
+          <p class="font-bold text-purple-700 text-sm">输出 (标签)</p>
+          <p class="text-xs text-slate-500 mt-1">MaterializeResult JSON</p>
+        </div>
+      </div>
+      <p class="text-xs text-slate-500 text-center">标准 cross-entropy loss — 模仿通用 LLM 生成的 Experience 标签</p>
+    </div>
+  </section>
+
+  <div class="connector mx-auto"></div>
+
+  <!-- ==================== STEP 2: GRPO ==================== -->
+  <section class="mb-2">
+    <div class="flex items-center gap-3 mb-4">
+      <span class="flex-shrink-0 w-9 h-9 rounded-full bg-violet-700 text-white flex items-center justify-center font-bold text-lg">2</span>
+      <div>
+        <h2 class="text-xl font-bold text-slate-900">阶段二：GRPO 强化训练</h2>
+        <p class="text-sm text-slate-500">同一输入生成多个候选，用奖励排名学习 — 学质量</p>
+      </div>
+    </div>
+
+    <div class="bg-violet-50 border border-violet-200 rounded-2xl p-6">
+
+      <!-- GRPO flow -->
+      <div class="grid grid-cols-1 md:grid-cols-5 gap-3 mb-5">
+
+        <div class="card bg-white rounded-xl border border-violet-200 p-4 text-center">
+          <span class="inline-block px-2 py-0.5 bg-violet-100 text-violet-700 text-[10px] font-bold rounded mb-2">Step A</span>
+          <h4 class="font-bold text-violet-800 text-sm mb-1">输入 Prompt</h4>
+          <p class="text-[11px] text-slate-600">Signal + Session 拼接为一段文本</p>
+        </div>
+
+        <div class="card bg-white rounded-xl border border-violet-200 p-4 text-center">
+          <span class="inline-block px-2 py-0.5 bg-violet-100 text-violet-700 text-[10px] font-bold rounded mb-2">Step B</span>
+          <h4 class="font-bold text-violet-800 text-sm mb-1">生成 N=4 候选</h4>
+          <p class="text-[11px] text-slate-600">temperature 采样 4 份 MaterializeResult</p>
+        </div>
+
+        <div class="card bg-amber-50 rounded-xl border-2 border-amber-400 p-4 text-center">
+          <span class="inline-block px-2 py-0.5 bg-amber-500 text-white text-[10px] font-bold rounded mb-2">Step C</span>
+          <h4 class="font-bold text-amber-800 text-sm mb-1">SAVR 五组分打分</h4>
+          <p class="text-[11px] text-slate-600">按信号类型自适应激活</p>
+          <p class="text-[10px] text-amber-600 font-semibold mt-1">详见下方</p>
+        </div>
+
+        <div class="card bg-white rounded-xl border border-violet-200 p-4 text-center">
+          <span class="inline-block px-2 py-0.5 bg-violet-100 text-violet-700 text-[10px] font-bold rounded mb-2">Step D</span>
+          <h4 class="font-bold text-violet-800 text-sm mb-1">组内标准化</h4>
+          <div class="formula text-[10px] mt-1 text-left">A<sub>i</sub> = (R<sub>i</sub> - mean) / (std + ε)</div>
+        </div>
+
+        <div class="card bg-violet-700 rounded-xl text-white p-4 text-center">
+          <span class="inline-block px-2 py-0.5 bg-white/20 text-white text-[10px] font-bold rounded mb-2">Step E</span>
+          <h4 class="font-bold text-sm mb-1">裁剪 Loss 更新</h4>
+          <div class="bg-white/10 rounded p-2 text-[10px] mt-1">
+            <p>ε_clip = 0.2</p>
+            <p>β_kl = 0.01</p>
+          </div>
+        </div>
+      </div>
+
+      <!-- GRPO formula -->
+      <div class="bg-white rounded-xl border border-violet-200 p-4 mb-5">
+        <p class="text-sm text-slate-700 mb-2"><span class="font-semibold text-violet-700">GRPO 核心公式</span>（与 OpenClaw-RL / MetaClaw 一致）:</p>
+        <div class="formula text-sm">
+          L = -E[ min( r(θ)·A, clip(r(θ), 1-ε, 1+ε)·A ) ] + β<sub>kl</sub> · KL(π<sub>θ</sub> || π<sub>ref</sub>)
+        </div>
+        <p class="text-xs text-slate-500 mt-2">r(θ) = π_θ(y|x) / π_old(y|x)（importance ratio）</p>
+      </div>
+
+      <!-- Loop illustration -->
+      <div class="bg-violet-100 rounded-xl p-4 flex items-center justify-center gap-2">
+        <svg class="w-5 h-5 text-violet-600" viewBox="0 0 20 20" fill="currentColor"><path fill-rule="evenodd" d="M15.312 11.424a5.5 5.5 0 01-9.38 2.12l-.124-.133a.75.75 0 00-1.06-.001L3 15.15V10.5a.75.75 0 01.75-.75h4.65l-1.74 1.74a.75.75 0 00.001 1.061l.125.133a4 4 0 006.822-1.54.75.75 0 011.404.28zM4.688 8.576a5.5 5.5 0 019.38-2.12l.124.133a.75.75 0 001.06.001L17 4.85v4.65a.75.75 0 01-.75.75h-4.65l1.74-1.74a.75.75 0 00-.001-1.061l-.125-.133a4 4 0 00-6.822 1.54.75.75 0 01-1.404-.28z" clip-rule="evenodd"></path></svg>
+        <p class="text-sm font-semibold text-violet-700">On-policy 循环：生成 → 打分 → 排名 → 更新策略 → 生成更好的候选 → ...</p>
+      </div>
+
+    </div>
+  </section>
+
+  <div class="connector mx-auto"></div>
+
+  <!-- ==================== STEP 3: Reward Function ==================== -->
+  <section class="mb-2">
+    <div class="flex items-center gap-3 mb-4">
+      <span class="flex-shrink-0 w-9 h-9 rounded-full bg-amber-500 text-white flex items-center justify-center font-bold text-lg">3</span>
+      <div>
+        <h2 class="text-xl font-bold text-slate-900">奖励函数：SAVR 五组分</h2>
+        <p class="text-sm text-slate-500">Signal-Adaptive Verifiable Reward — 按信号类型自适应选择验证手段</p>
+      </div>
+    </div>
+
+    <div class="bg-amber-50 border border-amber-200 rounded-2xl p-6">
+
+      <!-- Formula overview -->
+      <div class="formula text-center mb-5 text-base">
+        R<sub>total</sub> = w<sub>signal</sub> × Σ R<sub>active_components</sub>
+      </div>
+
+      <!-- 5 reward components -->
+      <div class="grid grid-cols-1 md:grid-cols-2 lg:grid-cols-3 gap-4 mb-5">
+
+        <!-- R_format -->
+        <div class="card bg-white rounded-xl border-2 border-slate-300 p-5">
+          <div class="flex items-center justify-between mb-3">
+            <div class="flex items-center gap-2">
+              <span class="w-8 h-8 rounded-full bg-slate-200 text-slate-700 flex items-center justify-center text-sm font-bold">F</span>
+              <h4 class="font-bold text-slate-800">R<sub>format</sub></h4>
+            </div>
+            <span class="text-[10px] font-mono bg-slate-100 px-2 py-0.5 rounded text-slate-600">[-1.0, +0.2]</span>
+          </div>
+          <p class="text-xs text-slate-600 mb-2">格式合规 — 门槛奖励（RLVR 风格）</p>
+          <div class="bg-slate-50 rounded-lg p-3 text-[11px] font-mono space-y-1">
+            <p class="text-red-600">JSON 解析失败 → <strong>-1.0</strong></p>
+            <p class="text-green-600">每个非空字段 → <strong>+0.04</strong> (5字段=0.20)</p>
+            <p class="text-amber-600">task_type 非法 → <strong>-0.05</strong></p>
+          </div>
+          <p class="text-[10px] text-slate-400 mt-2">类型: rule-based | 所有信号类型激活</p>
+        </div>
+
+        <!-- R_keyword_anchor -->
+        <div class="card bg-white rounded-xl border-2 border-teal-400 p-5">
+          <div class="flex items-center justify-between mb-3">
+            <div class="flex items-center gap-2">
+              <span class="w-8 h-8 rounded-full bg-teal-100 text-teal-700 flex items-center justify-center text-sm font-bold">K</span>
+              <h4 class="font-bold text-teal-800">R<sub>keyword</sub></h4>
+            </div>
+            <span class="text-[10px] font-mono bg-teal-50 px-2 py-0.5 rounded text-teal-700">[0, +0.15]</span>
+          </div>
+          <p class="text-xs text-slate-600 mb-2">关键词锚定 — resolution ↔ user_feedback 关键词重叠</p>
+          <div class="bg-teal-50 rounded-lg p-3 text-[11px] space-y-1.5">
+            <p class="text-teal-700">keyword_overlap(resolution, user_feedback) × 0.15</p>
+          </div>
+          <div class="mt-2 bg-white rounded p-2 border border-teal-100">
+            <p class="text-[10px] text-green-600 font-semibold">好: resolution 含"ls"、"确认"→ 0.12</p>
+            <p class="text-[10px] text-red-500 font-semibold mt-0.5">差: resolution 无关键词 → 0.00</p>
+          </div>
+          <p class="text-[10px] text-slate-400 mt-2">类型: rule-based | 仅 user_correction</p>
+        </div>
+
+        <!-- R_entity_anchor -->
+        <div class="card bg-white rounded-xl border-2 border-blue-400 p-5 relative">
+          <div class="absolute -top-2 -right-2 px-2 py-0.5 bg-blue-500 text-white text-[10px] font-bold rounded-full">新增</div>
+          <div class="flex items-center justify-between mb-3">
+            <div class="flex items-center gap-2">
+              <span class="w-8 h-8 rounded-full bg-blue-100 text-blue-700 flex items-center justify-center text-sm font-bold">E</span>
+              <h4 class="font-bold text-blue-800">R<sub>entity</sub></h4>
+            </div>
+            <span class="text-[10px] font-mono bg-blue-50 px-2 py-0.5 rounded text-blue-700">[0, +0.30]</span>
+          </div>
+          <p class="text-xs text-slate-600 mb-2">实体锚定 — root_cause 是否引用 session 中的具体实体</p>
+
+          <div class="bg-blue-50 rounded-lg p-3 text-[11px] space-y-1.5">
+            <div class="flex justify-between">
+              <span class="text-blue-700">实体引用率 (命令/路径/错误码)</span>
+              <span class="font-mono text-blue-600">× 0.15</span>
+            </div>
+            <div class="flex justify-between">
+              <span class="text-blue-700">步骤锚定 ("执行 X 时"、"第 N 步")</span>
+              <span class="font-mono text-blue-600">× 0.08</span>
+            </div>
+            <div class="flex justify-between">
+              <span class="text-blue-700">因果链 ("因为"、"导致")</span>
+              <span class="font-mono text-blue-600">× 0.07</span>
+            </div>
+          </div>
+
+          <div class="mt-2 bg-white rounded p-2 border border-blue-100">
+            <p class="text-[10px] text-green-600 font-semibold">好: "执行 rm -rf 时未先 ls 列出内容" → 0.25</p>
+            <p class="text-[10px] text-red-500 font-semibold mt-0.5">差: "操作流程不规范" → 0.02</p>
+          </div>
+          <p class="text-[10px] text-slate-400 mt-2">类型: rule-based | error 类信号激活</p>
+        </div>
+
+        <!-- R_align -->
+        <div class="card bg-white rounded-xl border-2 border-green-400 p-5">
+          <div class="flex items-center justify-between mb-3">
+            <div class="flex items-center gap-2">
+              <span class="w-8 h-8 rounded-full bg-green-100 text-green-700 flex items-center justify-center text-sm font-bold">A</span>
+              <h4 class="font-bold text-green-800">R<sub>align</sub></h4>
+            </div>
+            <span class="text-[10px] font-mono bg-green-50 px-2 py-0.5 rounded text-green-700">[-0.1, +0.35]</span>
+          </div>
+          <p class="text-xs text-slate-600 mb-2">Resolution 语义对齐 — 与 user_feedback 的 embedding 相似度</p>
+
+          <div class="bg-green-50 rounded-lg px-3 py-2 border border-green-200">
+            <p class="text-[10px] text-green-700">cosine_sim(embed(resolution), embed(user_feedback)) × 0.35</p>
+            <p class="text-[10px] text-slate-500 mt-1">embedding: bge-small-zh</p>
+          </div>
+          <p class="text-[10px] text-slate-400 mt-2">类型: embedding | 仅 user_correction</p>
+        </div>
+
+        <!-- R_prm -->
+        <div class="card bg-white rounded-xl border-2 border-amber-500 p-5 relative md:col-span-2">
+          <div class="absolute -top-2 -right-2 px-2 py-0.5 bg-amber-500 text-white text-[10px] font-bold rounded-full">核心创新</div>
+          <div class="flex items-center justify-between mb-3">
+            <div class="flex items-center gap-2">
+              <span class="w-8 h-8 rounded-full bg-amber-100 text-amber-700 flex items-center justify-center text-sm font-bold">P</span>
+              <h4 class="font-bold text-amber-800">R<sub>prm</sub> — LLM-as-Judge with Session Context</h4>
+            </div>
+            <span class="text-[10px] font-mono bg-amber-50 px-2 py-0.5 rounded text-amber-700">[-0.20, +0.20]</span>
+          </div>
+          <p class="text-xs text-slate-600 mb-3">以 <strong>session_context（完整会话轨迹）</strong>为客观证据，判断分析是否准确</p>
+
+          <div class="grid grid-cols-1 md:grid-cols-2 gap-3">
+            <div class="space-y-2">
+              <div class="bg-amber-50 rounded-lg px-3 py-2 border border-amber-200">
+                <p class="text-[10px] font-bold text-amber-700">机制</p>
+                <p class="text-[10px] text-slate-600">LLM 评审员 × 3 次独立采样 → 多数投票</p>
+                <p class="text-[10px] text-slate-600">输出 {-1, 0, +1} × 0.20 权重</p>
+              </div>
+              <div class="bg-amber-50 rounded-lg px-3 py-2 border border-amber-200">
+                <p class="text-[10px] font-bold text-amber-700">三个变体</p>
+                <p class="text-[10px] text-slate-600"><strong>prm</strong>: 评估整体准确性 (user_correction, self_recovery)</p>
+                <p class="text-[10px] text-slate-600"><strong>prm_diag</strong>: 仅评估诊断 (unresolved_error)</p>
+                <p class="text-[10px] text-slate-600"><strong>prm_weak</strong>: 弱约束 (new_tool, efficiency)</p>
+              </div>
+            </div>
+            <div class="bg-white rounded-lg p-3 border border-amber-200">
+              <p class="text-[10px] font-bold text-amber-700 mb-2">与 OpenClaw-RL 的类比</p>
+              <div class="text-[10px] text-slate-600 space-y-1.5">
+                <div class="flex gap-2">
+                  <span class="flex-shrink-0 text-slate-400 w-20">OpenClaw-RL:</span>
+                  <span>评估 (回复, <strong>next-state</strong>) → "回复是否有帮助？"</span>
+                </div>
+                <div class="flex gap-2">
+                  <span class="flex-shrink-0 text-amber-600 font-semibold w-20">我们:</span>
+                  <span>评估 (分析, <strong>session_context</strong>) → "分析是否准确？"</span>
+                </div>
+                <p class="text-[10px] text-amber-700 font-semibold mt-1">我们的证据更丰富 — 完整会话轨迹 vs 单条 next-state</p>
+              </div>
+            </div>
+          </div>
+          <p class="text-[10px] text-slate-400 mt-2">类型: LLM judge | 按信号类型选择变体</p>
+        </div>
+      </div>
+
+      <!-- Signal Type → Components + Weights Table -->
+      <div class="bg-white rounded-xl border-2 border-amber-300 p-5 mb-5">
+        <h4 class="font-bold text-amber-800 text-sm mb-3">信号类型 → 激活组分 + 权重对照表</h4>
+        <div class="overflow-x-auto">
+          <table class="w-full text-xs text-left">
+            <thead>
+              <tr class="border-b-2 border-amber-200">
+                <th class="py-2 pr-3 font-semibold text-slate-600">信号类型</th>
+                <th class="py-2 px-2 text-center font-semibold text-slate-500">F</th>
+                <th class="py-2 px-2 text-center font-semibold text-teal-600">K</th>
+                <th class="py-2 px-2 text-center font-semibold text-blue-600">E</th>
+                <th class="py-2 px-2 text-center font-semibold text-green-600">A</th>
+                <th class="py-2 px-2 text-center font-semibold text-amber-600">P</th>
+                <th class="py-2 px-2 text-center font-semibold text-violet-700">权重</th>
+                <th class="py-2 pl-3 font-semibold text-slate-600">GT 来源</th>
+              </tr>
+            </thead>
+            <tbody class="text-slate-600">
+              <tr class="border-b border-slate-100 bg-green-50/50">
+                <td class="py-2 pr-3 font-semibold text-green-700">user_correction</td>
+                <td class="py-2 px-2 text-center">✓</td>
+                <td class="py-2 px-2 text-center">✓</td>
+                <td class="py-2 px-2 text-center">✓</td>
+                <td class="py-2 px-2 text-center">✓</td>
+                <td class="py-2 px-2 text-center">prm</td>
+                <td class="py-2 px-2 text-center font-bold text-green-700">1.0</td>
+                <td class="py-2 pl-3 text-[10px]">user_feedback + session_context</td>
+              </tr>
+              <tr class="border-b border-slate-100 bg-blue-50/50">
+                <td class="py-2 pr-3 font-semibold text-blue-700">self_recovery</td>
+                <td class="py-2 px-2 text-center">✓</td>
+                <td class="py-2 px-2 text-center text-slate-300">—</td>
+                <td class="py-2 px-2 text-center">✓</td>
+                <td class="py-2 px-2 text-center text-slate-300">—</td>
+                <td class="py-2 px-2 text-center">prm</td>
+                <td class="py-2 px-2 text-center font-bold text-blue-700">0.8</td>
+                <td class="py-2 pl-3 text-[10px]">session_context（完整轨迹验证）</td>
+              </tr>
+              <tr class="border-b border-slate-100">
+                <td class="py-2 pr-3 font-semibold text-slate-600">unresolved_error</td>
+                <td class="py-2 px-2 text-center">✓</td>
+                <td class="py-2 px-2 text-center text-slate-300">—</td>
+                <td class="py-2 px-2 text-center">✓</td>
+                <td class="py-2 px-2 text-center text-slate-300">—</td>
+                <td class="py-2 px-2 text-center">prm_diag</td>
+                <td class="py-2 px-2 text-center font-bold">0.5</td>
+                <td class="py-2 pl-3 text-[10px]">error_snapshot + session_context</td>
+              </tr>
+              <tr class="border-b border-slate-100">
+                <td class="py-2 pr-3 font-semibold text-slate-500">new_tool</td>
+                <td class="py-2 px-2 text-center">✓</td>
+                <td class="py-2 px-2 text-center text-slate-300">—</td>
+                <td class="py-2 px-2 text-center text-slate-300">—</td>
+                <td class="py-2 px-2 text-center text-slate-300">—</td>
+                <td class="py-2 px-2 text-center">prm_weak</td>
+                <td class="py-2 px-2 text-center">0.25</td>
+                <td class="py-2 pl-3 text-[10px]">无硬 GT</td>
+              </tr>
+              <tr>
+                <td class="py-2 pr-3 font-semibold text-slate-500">efficiency_anomaly</td>
+                <td class="py-2 px-2 text-center">✓</td>
+                <td class="py-2 px-2 text-center text-slate-300">—</td>
+                <td class="py-2 px-2 text-center text-slate-300">—</td>
+                <td class="py-2 px-2 text-center text-slate-300">—</td>
+                <td class="py-2 px-2 text-center">prm_weak</td>
+                <td class="py-2 px-2 text-center">0.2</td>
+                <td class="py-2 pl-3 text-[10px]">无硬 GT</td>
+              </tr>
+            </tbody>
+          </table>
+        </div>
+        <p class="text-[10px] text-slate-500 mt-3">设计逻辑：GT 质量越高的信号 → 激活更多组分 + 更高权重 → 贡献更大训练梯度</p>
+      </div>
+
+      <!-- R_prm Prompt -->
+      <details class="bg-white rounded-xl border border-amber-200 overflow-hidden" open="">
+        <summary class="px-5 py-3 bg-amber-50 text-sm font-semibold text-amber-800 flex items-center gap-2 cursor-pointer">
+          <svg class="w-4 h-4" viewBox="0 0 20 20" fill="currentColor"><path fill-rule="evenodd" d="M5.23 7.21a.75.75 0 011.06.02L10 11.168l3.71-3.938a.75.75 0 111.08 1.04l-4.25 4.5a.75.75 0 01-1.08 0l-4.25-4.5a.75.75 0 01.02-1.06z" clip-rule="evenodd"></path></svg>
+          展开：R<sub>prm</sub> Prompt 设计
+        </summary>
+        <div class="p-5">
+          <div class="bg-slate-50 rounded-lg p-4 font-mono text-xs text-slate-700 space-y-3">
+            <div>
+              <p class="text-slate-400 mb-1">## 系统提示</p>
+              <p>你是一个分析质量评估器。你会看到一段 Agent 会话日志和一份结构化错误分析。</p>
+              <p>请判断：这份分析是否准确反映了会话中实际发生的事？</p>
+              <p>评分：\boxed{1}（准确）/ \boxed{-1}（矛盾/错误）/ \boxed{0}（模糊）</p>
+            </div>
+            <div>
+              <p class="text-slate-400 mb-1">## 用户提示</p>
+              <p>### 会话日志</p>
+              <p class="text-blue-600">{session_context}</p>
+              <p>### 错误分析</p>
+              <p class="text-purple-600">{MaterializeResult JSON}</p>
+              <p>请先分析会话中实际发生了什么，再判断这份分析是否准确。</p>
+            </div>
+          </div>
+        </div>
+      </details>
+    </div>
+  </section>
+
+  <div class="connector mx-auto"></div>
+
+  <!-- ==================== STEP 4: 奖励打分示例 ==================== -->
+  <section class="mb-2">
+    <div class="flex items-center gap-3 mb-4">
+      <span class="flex-shrink-0 w-9 h-9 rounded-full bg-slate-600 text-white flex items-center justify-center font-bold text-lg">4</span>
+      <div>
+        <h2 class="text-xl font-bold text-slate-900">打分示例：同一信号，4 个候选</h2>
+        <p class="text-sm text-slate-500">展示 GRPO 如何区分好坏候选（user_correction → 全组分激活）</p>
+      </div>
+    </div>
+
+    <div class="bg-slate-100 border border-slate-300 rounded-2xl p-6">
+
+      <!-- Context -->
+      <div class="bg-white rounded-xl border border-slate-200 p-4 mb-4">
+        <p class="text-xs text-slate-500 mb-1">场景：用户说"帮我删除 ~/old-project"，Agent 直接 rm -rf，用户纠正"以后先列出内容让我确认"</p>
+        <p class="text-xs font-mono text-blue-700">user_feedback: "以后删除前先 ls 列出内容，让我确认后再删"</p>
+        <p class="text-xs font-mono text-purple-600 mt-1">signal_type: user_correction → 激活 [F, K, E, A, P] × weight 1.0</p>
+      </div>
+
+      <!-- 4 candidates -->
+      <div class="grid grid-cols-1 md:grid-cols-2 gap-3">
+
+        <div class="bg-white rounded-xl border-2 border-green-400 p-4">
+          <div class="flex items-center justify-between mb-2">
+            <span class="text-[10px] font-bold text-green-700 bg-green-100 px-2 py-0.5 rounded">候选 1 — 最佳</span>
+            <span class="text-base font-bold text-green-700">R = 1.06</span>
+          </div>
+          <div class="text-[10px] font-mono text-slate-600 space-y-0.5">
+            <p><span class="text-purple-600">root_cause:</span> "执行 rm -rf 时未先 ls 列出目录内容供用户确认"</p>
+            <p><span class="text-purple-600">resolution:</span> "先 ls -la 列出内容 → 等用户确认 → 再 rm -rf"</p>
+          </div>
+          <div class="mt-2 grid grid-cols-5 gap-1 text-[9px]">
+            <div class="bg-slate-50 rounded p-1 text-center"><p class="text-slate-400">F</p><p class="font-bold">0.20</p></div>
+            <div class="bg-teal-50 rounded p-1 text-center"><p class="text-teal-600">K</p><p class="font-bold text-teal-700">0.12</p></div>
+            <div class="bg-blue-50 rounded p-1 text-center"><p class="text-blue-600">E</p><p class="font-bold text-blue-700">0.22</p></div>
+            <div class="bg-green-50 rounded p-1 text-center"><p class="text-green-600">A</p><p class="font-bold text-green-700">0.32</p></div>
+            <div class="bg-amber-50 rounded p-1 text-center"><p class="text-amber-600">P</p><p class="font-bold text-amber-700">0.20</p></div>
+          </div>
+        </div>
+
+        <div class="bg-white rounded-xl border border-slate-200 p-4">
+          <div class="flex items-center justify-between mb-2">
+            <span class="text-[10px] font-bold text-blue-700 bg-blue-100 px-2 py-0.5 rounded">候选 2 — 中等</span>
+            <span class="text-base font-bold text-blue-700">R = 0.48</span>
+          </div>
+          <div class="text-[10px] font-mono text-slate-600 space-y-0.5">
+            <p><span class="text-purple-600">root_cause:</span> "直接删除目录，未做安全确认"</p>
+            <p><span class="text-purple-600">resolution:</span> "删除操作前应先确认内容"</p>
+          </div>
+          <div class="mt-2 grid grid-cols-5 gap-1 text-[9px]">
+            <div class="bg-slate-50 rounded p-1 text-center"><p class="text-slate-400">F</p><p class="font-bold">0.20</p></div>
+            <div class="bg-teal-50 rounded p-1 text-center"><p class="text-teal-600">K</p><p class="font-bold">0.05</p></div>
+            <div class="bg-blue-50 rounded p-1 text-center"><p class="text-blue-600">E</p><p class="font-bold">0.05</p></div>
+            <div class="bg-green-50 rounded p-1 text-center"><p class="text-green-600">A</p><p class="font-bold">0.18</p></div>
+            <div class="bg-amber-50 rounded p-1 text-center"><p class="text-amber-600">P</p><p class="font-bold">0.00</p></div>
+          </div>
+        </div>
+
+        <div class="bg-white rounded-xl border border-slate-200 p-4">
+          <div class="flex items-center justify-between mb-2">
+            <span class="text-[10px] font-bold text-amber-700 bg-amber-100 px-2 py-0.5 rounded">候选 3 — 偏差</span>
+            <span class="text-base font-bold text-amber-700">R = 0.08</span>
+          </div>
+          <div class="text-[10px] font-mono text-slate-600 space-y-0.5">
+            <p><span class="text-purple-600">root_cause:</span> "操作流程不够规范"</p>
+            <p><span class="text-purple-600">resolution:</span> "建议使用 trash-cli 代替 rm"</p>
+          </div>
+          <div class="mt-2 grid grid-cols-5 gap-1 text-[9px]">
+            <div class="bg-slate-50 rounded p-1 text-center"><p class="text-slate-400">F</p><p class="font-bold">0.20</p></div>
+            <div class="bg-teal-50 rounded p-1 text-center"><p class="text-teal-600">K</p><p class="font-bold">0.00</p></div>
+            <div class="bg-blue-50 rounded p-1 text-center"><p class="text-blue-600">E</p><p class="font-bold">0.02</p></div>
+            <div class="bg-green-50 rounded p-1 text-center"><p class="text-green-600">A</p><p class="font-bold">0.06</p></div>
+            <div class="bg-amber-50 rounded p-1 text-center"><p class="text-amber-600">P</p><p class="font-bold text-red-500">-0.20</p></div>
+          </div>
+        </div>
+
+        <div class="bg-white rounded-xl border-2 border-red-300 p-4">
+          <div class="flex items-center justify-between mb-2">
+            <span class="text-[10px] font-bold text-red-600 bg-red-100 px-2 py-0.5 rounded">候选 4 — 最差</span>
+            <span class="text-base font-bold text-red-600">R = -1.0</span>
+          </div>
+          <div class="text-[10px] font-mono text-slate-600 space-y-0.5">
+            <p><span class="text-purple-600">root_cause:</span> "需要优化"</p>
+            <p><span class="text-purple-600">resolution:</span> (JSON 字段缺失)</p>
+          </div>
+          <div class="mt-2 grid grid-cols-5 gap-1 text-[9px]">
+            <div class="bg-red-50 rounded p-1 text-center"><p class="text-slate-400">F</p><p class="font-bold text-red-600">-1.0</p></div>
+            <div class="bg-slate-50 rounded p-1 text-center"><p class="text-teal-600">K</p><p class="font-bold">—</p></div>
+            <div class="bg-slate-50 rounded p-1 text-center"><p class="text-blue-600">E</p><p class="font-bold">—</p></div>
+            <div class="bg-slate-50 rounded p-1 text-center"><p class="text-green-600">A</p><p class="font-bold">—</p></div>
+            <div class="bg-slate-50 rounded p-1 text-center"><p class="text-amber-600">P</p><p class="font-bold">—</p></div>
+          </div>
+        </div>
+      </div>
+
+      <!-- Advantage -->
+      <div class="bg-white rounded-xl border border-slate-200 p-4 mt-4">
+        <p class="text-sm font-semibold text-slate-700 mb-2">GRPO 组内标准化后的优势 (Advantage):</p>
+        <div class="flex gap-4 text-sm font-mono">
+          <span class="text-green-700">A₁ = <strong>+1.05</strong></span>
+          <span class="text-blue-700">A₂ = <strong>+0.04</strong></span>
+          <span class="text-amber-700">A₃ = <strong>-0.49</strong></span>
+          <span class="text-red-600">A₄ = <strong>-0.60</strong></span>
+        </div>
+        <p class="text-xs text-slate-500 mt-2">→ 策略更新后，模型生成候选 1 类答案的概率上升，候选 4 类的概率下降</p>
+      </div>
+
+    </div>
+  </section>
+
+  <div class="connector mx-auto"></div>
+
+  <!-- ==================== STEP 5: 离线评估 ==================== -->
+  <section class="mb-2">
+    <div class="flex items-center gap-3 mb-4">
+      <span class="flex-shrink-0 w-9 h-9 rounded-full bg-green-600 text-white flex items-center justify-center font-bold text-lg">5</span>
+      <div>
+        <h2 class="text-xl font-bold text-slate-900">离线评估：三模型对比</h2>
+        <p class="text-sm text-slate-500">验证 GRPO 训练后模型是否真的更好</p>
+      </div>
+    </div>
+
+    <div class="bg-green-50 border border-green-200 rounded-2xl p-6">
+      <div class="grid grid-cols-1 md:grid-cols-3 gap-4 mb-4">
+        <div class="card bg-white rounded-xl border border-slate-200 p-4 text-center">
+          <span class="inline-block px-2 py-0.5 bg-slate-100 text-slate-600 text-[10px] font-bold rounded mb-2">对照 A</span>
+          <p class="font-bold text-slate-800">基座模型</p>
+          <p class="text-xs text-slate-500 mt-1">Qwen3.5-32B 未微调</p>
+        </div>
+        <div class="card bg-white rounded-xl border border-purple-300 p-4 text-center">
+          <span class="inline-block px-2 py-0.5 bg-purple-100 text-purple-700 text-[10px] font-bold rounded mb-2">对照 B</span>
+          <p class="font-bold text-purple-700">SFT 模型</p>
+          <p class="text-xs text-slate-500 mt-1">仅 SFT，无 GRPO</p>
+        </div>
+        <div class="card bg-white rounded-xl border-2 border-violet-500 p-4 text-center">
+          <span class="inline-block px-2 py-0.5 bg-violet-600 text-white text-[10px] font-bold rounded mb-2">实验组</span>
+          <p class="font-bold text-violet-700">SFT + GRPO 模型</p>
+          <p class="text-xs text-slate-500 mt-1">完整两阶段训练</p>
+        </div>
+      </div>
+
+      <div class="bg-white rounded-xl border border-green-200 p-4">
+        <div class="grid grid-cols-1 md:grid-cols-3 gap-3 text-sm">
+          <div class="rounded-lg bg-green-50 border border-green-200 px-3 py-2">
+            <p class="font-semibold text-green-700 text-xs">Resolution ROUGE-L</p>
+            <p class="text-[11px] text-slate-600">resolution 与 user_feedback 文本重叠</p>
+          </div>
+          <div class="rounded-lg bg-green-50 border border-green-200 px-3 py-2">
+            <p class="font-semibold text-green-700 text-xs">SAVR R_total 均值</p>
+            <p class="text-[11px] text-slate-600">五组分奖励函数的综合得分</p>
+          </div>
+          <div class="rounded-lg bg-green-50 border border-green-200 px-3 py-2">
+            <p class="font-semibold text-green-700 text-xs">GPT-4o 盲评</p>
+            <p class="text-[11px] text-slate-600">三模型输出随机排序，GPT-4o 评质量</p>
+          </div>
+        </div>
+      </div>
+    </div>
+  </section>
+
+  <div class="connector mx-auto"></div>
+
+  <!-- ==================== STEP 6: 部署 ==================== -->
+  <section class="mb-8">
+    <div class="flex items-center gap-3 mb-4">
+      <span class="flex-shrink-0 w-9 h-9 rounded-full bg-emerald-600 text-white flex items-center justify-center font-bold text-lg">6</span>
+      <div>
+        <h2 class="text-xl font-bold text-slate-900">部署替换</h2>
+        <p class="text-sm text-slate-500">训练好的模型替换通用 LLM API</p>
+      </div>
+    </div>
+
+    <div class="bg-emerald-50 border border-emerald-200 rounded-2xl p-6">
+      <div class="flex flex-wrap items-center justify-center gap-3 lg:gap-4">
+        <div class="rounded-xl bg-white border border-emerald-200 px-5 py-4 text-center w-48">
+          <p class="text-xs text-slate-500 mb-1">训练前</p>
+          <p class="font-bold text-amber-700">通用 LLM API</p>
+        </div>
+        <svg class="hidden lg:block w-10 h-6 text-emerald-500 flex-shrink-0" viewBox="0 0 32 16"><path d="M2 8h26m0 0l-6-5m6 5l-6 5" stroke="currentColor" stroke-width="2.5" fill="none" stroke-linecap="round" stroke-linejoin="round"></path></svg>
+        <div class="rounded-xl bg-violet-700 text-white px-5 py-4 text-center w-48">
+          <p class="text-xs text-violet-200 mb-1">训练后</p>
+          <p class="font-bold">SFT + GRPO 模型</p>
+        </div>
+        <svg class="hidden lg:block w-10 h-6 text-emerald-500 flex-shrink-0" viewBox="0 0 32 16"><path d="M2 8h26m0 0l-6-5m6 5l-6 5" stroke="currentColor" stroke-width="2.5" fill="none" stroke-linecap="round" stroke-linejoin="round"></path></svg>
+        <div class="rounded-xl bg-white border-2 border-green-400 px-5 py-4 text-left w-56">
+          <p class="font-semibold text-green-700 text-sm mb-1">替换 2 处调用</p>
+          <p class="text-xs text-slate-600">1. materialize_signal</p>
+          <p class="text-xs text-slate-600">2. extract_taxonomy</p>
+        </div>
+      </div>
+    </div>
+  </section>
+
+  <!-- Summary -->
+  <div class="bg-slate-900 text-white rounded-2xl p-6 mb-6">
+    <h3 class="font-bold text-lg mb-3">训练链路一句话总结</h3>
+    <div class="flex flex-wrap items-center justify-center gap-2 text-sm">
+      <span class="px-3 py-1.5 bg-purple-600 rounded-lg font-semibold">SFT 学格式</span>
+      <span class="text-slate-500">→</span>
+      <span class="px-3 py-1.5 bg-violet-600 rounded-lg font-semibold">GRPO 生成 4 候选</span>
+      <span class="text-slate-500">→</span>
+      <span class="px-3 py-1.5 bg-amber-500 rounded-lg font-semibold">SAVR 五组分打分</span>
+      <span class="text-slate-500">→</span>
+      <span class="px-3 py-1.5 bg-green-600 rounded-lg font-semibold">组内排名更新策略</span>
+      <span class="text-slate-500">→</span>
+      <span class="px-3 py-1.5 bg-emerald-600 rounded-lg font-semibold">部署替换</span>
+    </div>
+    <p class="text-slate-400 text-sm mt-4 text-center">核心创新：Signal-Adaptive Verifiable Reward — 按信号类型自适应选择验证手段，用 session_context 为 LLM judge 提供客观证据</p>
+  </div>
+
+  <!-- Comparison table -->
+  <div class="bg-white border border-slate-200 rounded-2xl p-6">
+    <h3 class="font-bold text-slate-800 text-base mb-3">与参考项目的对比</h3>
+    <div class="overflow-x-auto">
+      <table class="w-full text-xs text-left">
+        <thead>
+          <tr class="border-b border-slate-200">
+            <th class="py-2 pr-3 font-semibold text-slate-600">维度</th>
+            <th class="py-2 px-3 font-semibold text-slate-600">OpenClaw-RL</th>
+            <th class="py-2 px-3 font-semibold text-slate-600">AReaL</th>
+            <th class="py-2 px-3 font-semibold text-slate-600">MetaClaw</th>
+            <th class="py-2 pl-3 font-semibold text-violet-700">我们 (SAVR)</th>
+          </tr>
+        </thead>
+        <tbody class="text-slate-600">
+          <tr class="border-b border-slate-100">
+            <td class="py-2 pr-3 font-medium">算法</td>
+            <td class="py-2 px-3">GRPO</td>
+            <td class="py-2 px-3">PPO (GRPO 风格)</td>
+            <td class="py-2 px-3">GRPO (IS)</td>
+            <td class="py-2 pl-3 font-semibold text-violet-700">GRPO</td>
+          </tr>
+          <tr class="border-b border-slate-100">
+            <td class="py-2 pr-3 font-medium">奖励组分数</td>
+            <td class="py-2 px-3">1 (PRM)</td>
+            <td class="py-2 px-3">1 (binary)</td>
+            <td class="py-2 px-3">1 (PRM)</td>
+            <td class="py-2 pl-3 font-semibold text-violet-700">5 (F+K+E+A+P)</td>
+          </tr>
+          <tr class="border-b border-slate-100">
+            <td class="py-2 pr-3 font-medium">GT 来源</td>
+            <td class="py-2 px-3">next-state</td>
+            <td class="py-2 px-3">标准答案</td>
+            <td class="py-2 px-3">无</td>
+            <td class="py-2 pl-3 font-semibold text-violet-700">user_feedback + session_context</td>
+          </tr>
+          <tr class="border-b border-slate-100">
+            <td class="py-2 pr-3 font-medium">PRM 证据</td>
+            <td class="py-2 px-3">单步 next-state</td>
+            <td class="py-2 px-3">N/A</td>
+            <td class="py-2 px-3">无客观证据</td>
+            <td class="py-2 pl-3 font-semibold text-amber-600">完整 session_context</td>
+          </tr>
+          <tr class="border-b border-slate-100">
+            <td class="py-2 pr-3 font-medium">GT 质量策略</td>
+            <td class="py-2 px-3">统一处理</td>
+            <td class="py-2 px-3">完美 GT</td>
+            <td class="py-2 px-3">统一处理</td>
+            <td class="py-2 pl-3 font-semibold text-amber-600">按信号类型分层加权</td>
+          </tr>
+          <tr class="border-b border-slate-100">
+            <td class="py-2 pr-3 font-medium">KL 控制</td>
+            <td class="py-2 px-3">0.01</td>
+            <td class="py-2 px-3">0.0~0.1</td>
+            <td class="py-2 px-3">OPD KL</td>
+            <td class="py-2 pl-3 font-semibold text-violet-700">0.01</td>
+          </tr>
+          <tr>
+            <td class="py-2 pr-3 font-medium">训练目标</td>
+            <td class="py-2 px-3">Agent 策略</td>
+            <td class="py-2 px-3">推理能力</td>
+            <td class="py-2 px-3">Agent 策略</td>
+            <td class="py-2 pl-3 font-semibold text-violet-700">错误分析生成</td>
+          </tr>
+        </tbody>
+      </table>
+    </div>
+  </div>
+
+</div>
+
+
+</body></html>

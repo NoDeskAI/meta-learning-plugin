@@ -1,0 +1,539 @@
+<!DOCTYPE html>
+<!-- saved from url=(0100)file:///Users/yumeng/Documents/Projects/lingmin-meta-learning/docs/pipeline_agent_meta_learning.html -->
+<html lang="zh-CN"><head><meta http-equiv="Content-Type" content="text/html; charset=UTF-8">
+
+<meta name="viewport" content="width=device-width, initial-scale=1.0">
+<title>Agent 自进化学习系统 — 三层架构</title>
+<script src="./Agent 自进化学习系统 — 三层架构_files/saved_resource"></script>
+<link rel="preconnect" href="https://fonts.googleapis.com/">
+<link href="./Agent 自进化学习系统 — 三层架构_files/css2" rel="stylesheet">
+<script>
+tailwind.config = {
+  theme: {
+    extend: {
+      fontFamily: { sans: ['Fira Sans', 'sans-serif'], mono: ['Fira Code', 'monospace'] },
+      colors: {
+        rule: { bg:'#f0fdf4', border:'#86efac', text:'#166534', fill:'#dcfce7' },
+        api: { bg:'#fffbeb', border:'#fde68a', text:'#92400e', fill:'#fef9c3' },
+        rl: { bg:'#faf5ff', border:'#c4b5fd', text:'#6b21a8', fill:'#ede9fe' },
+        data: { bg:'#eff6ff', border:'#93c5fd', text:'#1e40af', fill:'#dbeafe' },
+        l3: { bg:'#fff7ed', border:'#fdba74', text:'#9a3412', fill:'#ffedd5' },
+      }
+    }
+  }
+}
+</script>
+<style>
+  .connector { height: 28px; width: 2px; background: #cbd5e1; margin: 0 auto; position: relative; }
+  .connector::after {
+    content: ''; position: absolute; left: 50%; bottom: 0; transform: translateX(-50%);
+    border-left: 6px solid transparent; border-right: 6px solid transparent; border-top: 7px solid #cbd5e1;
+  }
+  .card { transition: all 200ms ease; }
+  .card:hover { transform: translateY(-2px); box-shadow: 0 8px 25px -5px rgba(0,0,0,.12); }
+  .layer-badge { writing-mode: vertical-rl; text-orientation: mixed; letter-spacing: 0.05em; }
+  details summary { cursor: pointer; }
+  details summary::-webkit-details-marker { display: none; }
+</style>
+<style>*, ::before, ::after{--tw-border-spacing-x:0;--tw-border-spacing-y:0;--tw-translate-x:0;--tw-translate-y:0;--tw-rotate:0;--tw-skew-x:0;--tw-skew-y:0;--tw-scale-x:1;--tw-scale-y:1;--tw-pan-x: ;--tw-pan-y: ;--tw-pinch-zoom: ;--tw-scroll-snap-strictness:proximity;--tw-gradient-from-position: ;--tw-gradient-via-position: ;--tw-gradient-to-position: ;--tw-ordinal: ;--tw-slashed-zero: ;--tw-numeric-figure: ;--tw-numeric-spacing: ;--tw-numeric-fraction: ;--tw-ring-inset: ;--tw-ring-offset-width:0px;--tw-ring-offset-color:#fff;--tw-ring-color:rgb(59 130 246 / 0.5);--tw-ring-offset-shadow:0 0 #0000;--tw-ring-shadow:0 0 #0000;--tw-shadow:0 0 #0000;--tw-shadow-colored:0 0 #0000;--tw-blur: ;--tw-brightness: ;--tw-contrast: ;--tw-grayscale: ;--tw-hue-rotate: ;--tw-invert: ;--tw-saturate: ;--tw-sepia: ;--tw-drop-shadow: ;--tw-backdrop-blur: ;--tw-backdrop-brightness: ;--tw-backdrop-contrast: ;--tw-backdrop-grayscale: ;--tw-backdrop-hue-rotate: ;--tw-backdrop-invert: ;--tw-backdrop-opacity: ;--tw-backdrop-saturate: ;--tw-backdrop-sepia: ;--tw-contain-size: ;--tw-contain-layout: ;--tw-contain-paint: ;--tw-contain-style: }::backdrop{--tw-border-spacing-x:0;--tw-border-spacing-y:0;--tw-translate-x:0;--tw-translate-y:0;--tw-rotate:0;--tw-skew-x:0;--tw-skew-y:0;--tw-scale-x:1;--tw-scale-y:1;--tw-pan-x: ;--tw-pan-y: ;--tw-pinch-zoom: ;--tw-scroll-snap-strictness:proximity;--tw-gradient-from-position: ;--tw-gradient-via-position: ;--tw-gradient-to-position: ;--tw-ordinal: ;--tw-slashed-zero: ;--tw-numeric-figure: ;--tw-numeric-spacing: ;--tw-numeric-fraction: ;--tw-ring-inset: ;--tw-ring-offset-width:0px;--tw-ring-offset-color:#fff;--tw-ring-color:rgb(59 130 246 / 0.5);--tw-ring-offset-shadow:0 0 #0000;--tw-ring-shadow:0 0 #0000;--tw-shadow:0 0 #0000;--tw-shadow-colored:0 0 #0000;--tw-blur: ;--tw-brightness: ;--tw-contrast: ;--tw-grayscale: ;--tw-hue-rotate: ;--tw-invert: ;--tw-saturate: ;--tw-sepia: ;--tw-drop-shadow: ;--tw-backdrop-blur: ;--tw-backdrop-brightness: ;--tw-backdrop-contrast: ;--tw-backdrop-grayscale: ;--tw-backdrop-hue-rotate: ;--tw-backdrop-invert: ;--tw-backdrop-opacity: ;--tw-backdrop-saturate: ;--tw-backdrop-sepia: ;--tw-contain-size: ;--tw-contain-layout: ;--tw-contain-paint: ;--tw-contain-style: }/* ! tailwindcss v3.4.17 | MIT License | https://tailwindcss.com */*,::after,::before{box-sizing:border-box;border-width:0;border-style:solid;border-color:#e5e7eb}::after,::before{--tw-content:''}:host,html{line-height:1.5;-webkit-text-size-adjust:100%;-moz-tab-size:4;tab-size:4;font-family:Fira Sans, sans-serif;font-feature-settings:normal;font-variation-settings:normal;-webkit-tap-highlight-color:transparent}body{margin:0;line-height:inherit}hr{height:0;color:inherit;border-top-width:1px}abbr:where([title]){-webkit-text-decoration:underline dotted;text-decoration:underline dotted}h1,h2,h3,h4,h5,h6{font-size:inherit;font-weight:inherit}a{color:inherit;text-decoration:inherit}b,strong{font-weight:bolder}code,kbd,pre,samp{font-family:Fira Code, monospace;font-feature-settings:normal;font-variation-settings:normal;font-size:1em}small{font-size:80%}sub,sup{font-size:75%;line-height:0;position:relative;vertical-align:baseline}sub{bottom:-.25em}sup{top:-.5em}table{text-indent:0;border-color:inherit;border-collapse:collapse}button,input,optgroup,select,textarea{font-family:inherit;font-feature-settings:inherit;font-variation-settings:inherit;font-size:100%;font-weight:inherit;line-height:inherit;letter-spacing:inherit;color:inherit;margin:0;padding:0}button,select{text-transform:none}button,input:where([type=button]),input:where([type=reset]),input:where([type=submit]){-webkit-appearance:button;background-color:transparent;background-image:none}:-moz-focusring{outline:auto}:-moz-ui-invalid{box-shadow:none}progress{vertical-align:baseline}::-webkit-inner-spin-button,::-webkit-outer-spin-button{height:auto}[type=search]{-webkit-appearance:textfield;outline-offset:-2px}::-webkit-search-decoration{-webkit-appearance:none}::-webkit-file-upload-button{-webkit-appearance:button;font:inherit}summary{display:list-item}blockquote,dd,dl,figure,h1,h2,h3,h4,h5,h6,hr,p,pre{margin:0}fieldset{margin:0;padding:0}legend{padding:0}menu,ol,ul{list-style:none;margin:0;padding:0}dialog{padding:0}textarea{resize:vertical}input::placeholder,textarea::placeholder{opacity:1;color:#9ca3af}[role=button],button{cursor:pointer}:disabled{cursor:default}audio,canvas,embed,iframe,img,object,svg,video{display:block;vertical-align:middle}img,video{max-width:100%;height:auto}[hidden]:where(:not([hidden=until-found])){display:none}.mx-auto{margin-left:auto;margin-right:auto}.mb-1{margin-bottom:0.25rem}.mb-2{margin-bottom:0.5rem}.mb-3{margin-bottom:0.75rem}.mb-4{margin-bottom:1rem}.mb-6{margin-bottom:1.5rem}.mb-8{margin-bottom:2rem}.mt-0\.5{margin-top:0.125rem}.mt-1{margin-top:0.25rem}.mt-2{margin-top:0.5rem}.mt-3{margin-top:0.75rem}.mt-4{margin-top:1rem}.mt-5{margin-top:1.25rem}.inline-block{display:inline-block}.flex{display:flex}.inline-flex{display:inline-flex}.grid{display:grid}.hidden{display:none}.h-3{height:0.75rem}.h-4{height:1rem}.h-5{height:1.25rem}.h-6{height:1.5rem}.w-14{width:3.5rem}.w-20{width:5rem}.w-3{width:0.75rem}.w-4{width:1rem}.w-5{width:1.25rem}.w-6{width:1.5rem}.w-full{width:100%}.max-w-6xl{max-width:72rem}.flex-1{flex:1 1 0%}.flex-shrink-0{flex-shrink:0}.cursor-pointer{cursor:pointer}.grid-cols-1{grid-template-columns:repeat(1, minmax(0, 1fr))}.flex-wrap{flex-wrap:wrap}.items-start{align-items:flex-start}.items-center{align-items:center}.items-stretch{align-items:stretch}.justify-center{justify-content:center}.gap-1\.5{gap:0.375rem}.gap-2{gap:0.5rem}.gap-3{gap:0.75rem}.gap-4{gap:1rem}.space-y-0\.5 > :not([hidden]) ~ :not([hidden]){--tw-space-y-reverse:0;margin-top:calc(0.125rem * calc(1 - var(--tw-space-y-reverse)));margin-bottom:calc(0.125rem * var(--tw-space-y-reverse))}.space-y-1 > :not([hidden]) ~ :not([hidden]){--tw-space-y-reverse:0;margin-top:calc(0.25rem * calc(1 - var(--tw-space-y-reverse)));margin-bottom:calc(0.25rem * var(--tw-space-y-reverse))}.space-y-1\.5 > :not([hidden]) ~ :not([hidden]){--tw-space-y-reverse:0;margin-top:calc(0.375rem * calc(1 - var(--tw-space-y-reverse)));margin-bottom:calc(0.375rem * var(--tw-space-y-reverse))}.overflow-hidden{overflow:hidden}.overflow-x-auto{overflow-x:auto}.rounded{border-radius:0.25rem}.rounded-2xl{border-radius:1rem}.rounded-full{border-radius:9999px}.rounded-lg{border-radius:0.5rem}.rounded-xl{border-radius:0.75rem}.border{border-width:1px}.border-2{border-width:2px}.border-b{border-bottom-width:1px}.border-b-2{border-bottom-width:2px}.border-t{border-top-width:1px}.border-amber-200{--tw-border-opacity:1;border-color:rgb(253 230 138 / var(--tw-border-opacity, 1))}.border-amber-300{--tw-border-opacity:1;border-color:rgb(252 211 77 / var(--tw-border-opacity, 1))}.border-api-border{--tw-border-opacity:1;border-color:rgb(253 230 138 / var(--tw-border-opacity, 1))}.border-blue-200{--tw-border-opacity:1;border-color:rgb(191 219 254 / var(--tw-border-opacity, 1))}.border-data-border{--tw-border-opacity:1;border-color:rgb(147 197 253 / var(--tw-border-opacity, 1))}.border-green-200{--tw-border-opacity:1;border-color:rgb(187 247 208 / var(--tw-border-opacity, 1))}.border-orange-200{--tw-border-opacity:1;border-color:rgb(254 215 170 / var(--tw-border-opacity, 1))}.border-purple-200{--tw-border-opacity:1;border-color:rgb(233 213 255 / var(--tw-border-opacity, 1))}.border-rl-border{--tw-border-opacity:1;border-color:rgb(196 181 253 / var(--tw-border-opacity, 1))}.border-rule-border{--tw-border-opacity:1;border-color:rgb(134 239 172 / var(--tw-border-opacity, 1))}.border-slate-100{--tw-border-opacity:1;border-color:rgb(241 245 249 / var(--tw-border-opacity, 1))}.border-slate-200{--tw-border-opacity:1;border-color:rgb(226 232 240 / var(--tw-border-opacity, 1))}.border-slate-300{--tw-border-opacity:1;border-color:rgb(203 213 225 / var(--tw-border-opacity, 1))}.bg-amber-100{--tw-bg-opacity:1;background-color:rgb(254 243 199 / var(--tw-bg-opacity, 1))}.bg-amber-200{--tw-bg-opacity:1;background-color:rgb(253 230 138 / var(--tw-bg-opacity, 1))}.bg-amber-50{--tw-bg-opacity:1;background-color:rgb(255 251 235 / var(--tw-bg-opacity, 1))}.bg-amber-500{--tw-bg-opacity:1;background-color:rgb(245 158 11 / var(--tw-bg-opacity, 1))}.bg-api-fill{--tw-bg-opacity:1;background-color:rgb(254 249 195 / var(--tw-bg-opacity, 1))}.bg-blue-100{--tw-bg-opacity:1;background-color:rgb(219 234 254 / var(--tw-bg-opacity, 1))}.bg-blue-50{--tw-bg-opacity:1;background-color:rgb(239 246 255 / var(--tw-bg-opacity, 1))}.bg-blue-500{--tw-bg-opacity:1;background-color:rgb(59 130 246 / var(--tw-bg-opacity, 1))}.bg-blue-600{--tw-bg-opacity:1;background-color:rgb(37 99 235 / var(--tw-bg-opacity, 1))}.bg-data-fill{--tw-bg-opacity:1;background-color:rgb(219 234 254 / var(--tw-bg-opacity, 1))}.bg-green-100{--tw-bg-opacity:1;background-color:rgb(220 252 231 / var(--tw-bg-opacity, 1))}.bg-green-200{--tw-bg-opacity:1;background-color:rgb(187 247 208 / var(--tw-bg-opacity, 1))}.bg-green-50{--tw-bg-opacity:1;background-color:rgb(240 253 244 / var(--tw-bg-opacity, 1))}.bg-green-500{--tw-bg-opacity:1;background-color:rgb(34 197 94 / var(--tw-bg-opacity, 1))}.bg-orange-100{--tw-bg-opacity:1;background-color:rgb(255 237 213 / var(--tw-bg-opacity, 1))}.bg-orange-50{--tw-bg-opacity:1;background-color:rgb(255 247 237 / var(--tw-bg-opacity, 1))}.bg-orange-500{--tw-bg-opacity:1;background-color:rgb(249 115 22 / var(--tw-bg-opacity, 1))}.bg-orange-600{--tw-bg-opacity:1;background-color:rgb(234 88 12 / var(--tw-bg-opacity, 1))}.bg-purple-100{--tw-bg-opacity:1;background-color:rgb(243 232 255 / var(--tw-bg-opacity, 1))}.bg-purple-200{--tw-bg-opacity:1;background-color:rgb(233 213 255 / var(--tw-bg-opacity, 1))}.bg-purple-50{--tw-bg-opacity:1;background-color:rgb(250 245 255 / var(--tw-bg-opacity, 1))}.bg-purple-500{--tw-bg-opacity:1;background-color:rgb(168 85 247 / var(--tw-bg-opacity, 1))}.bg-purple-600{--tw-bg-opacity:1;background-color:rgb(147 51 234 / var(--tw-bg-opacity, 1))}.bg-purple-700{--tw-bg-opacity:1;background-color:rgb(126 34 206 / var(--tw-bg-opacity, 1))}.bg-rl-bg{--tw-bg-opacity:1;background-color:rgb(250 245 255 / var(--tw-bg-opacity, 1))}.bg-rl-fill{--tw-bg-opacity:1;background-color:rgb(237 233 254 / var(--tw-bg-opacity, 1))}.bg-rule-fill{--tw-bg-opacity:1;background-color:rgb(220 252 231 / var(--tw-bg-opacity, 1))}.bg-slate-100{--tw-bg-opacity:1;background-color:rgb(241 245 249 / var(--tw-bg-opacity, 1))}.bg-slate-50{--tw-bg-opacity:1;background-color:rgb(248 250 252 / var(--tw-bg-opacity, 1))}.bg-slate-900{--tw-bg-opacity:1;background-color:rgb(15 23 42 / var(--tw-bg-opacity, 1))}.bg-violet-100{--tw-bg-opacity:1;background-color:rgb(237 233 254 / var(--tw-bg-opacity, 1))}.bg-violet-800{--tw-bg-opacity:1;background-color:rgb(91 33 182 / var(--tw-bg-opacity, 1))}.bg-white{--tw-bg-opacity:1;background-color:rgb(255 255 255 / var(--tw-bg-opacity, 1))}.bg-white\/10{background-color:rgb(255 255 255 / 0.1)}.p-3{padding:0.75rem}.p-4{padding:1rem}.p-5{padding:1.25rem}.p-6{padding:1.5rem}.px-1{padding-left:0.25rem;padding-right:0.25rem}.px-1\.5{padding-left:0.375rem;padding-right:0.375rem}.px-2{padding-left:0.5rem;padding-right:0.5rem}.px-3{padding-left:0.75rem;padding-right:0.75rem}.px-4{padding-left:1rem;padding-right:1rem}.px-6{padding-left:1.5rem;padding-right:1.5rem}.py-0\.5{padding-top:0.125rem;padding-bottom:0.125rem}.py-1{padding-top:0.25rem;padding-bottom:0.25rem}.py-1\.5{padding-top:0.375rem;padding-bottom:0.375rem}.py-10{padding-top:2.5rem;padding-bottom:2.5rem}.py-2{padding-top:0.5rem;padding-bottom:0.5rem}.py-2\.5{padding-top:0.625rem;padding-bottom:0.625rem}.py-3{padding-top:0.75rem;padding-bottom:0.75rem}.py-4{padding-top:1rem;padding-bottom:1rem}.pb-4{padding-bottom:1rem}.pb-5{padding-bottom:1.25rem}.pl-3{padding-left:0.75rem}.pr-3{padding-right:0.75rem}.pt-5{padding-top:1.25rem}.text-left{text-align:left}.text-center{text-align:center}.font-mono{font-family:Fira Code, monospace}.text-3xl{font-size:1.875rem;line-height:2.25rem}.text-\[10px\]{font-size:10px}.text-\[11px\]{font-size:11px}.text-\[9px\]{font-size:9px}.text-base{font-size:1rem;line-height:1.5rem}.text-lg{font-size:1.125rem;line-height:1.75rem}.text-sm{font-size:0.875rem;line-height:1.25rem}.text-xs{font-size:0.75rem;line-height:1rem}.font-bold{font-weight:700}.font-medium{font-weight:500}.font-semibold{font-weight:600}.tracking-wider{letter-spacing:0.05em}.text-amber-400{--tw-text-opacity:1;color:rgb(251 191 36 / var(--tw-text-opacity, 1))}.text-amber-600{--tw-text-opacity:1;color:rgb(217 119 6 / var(--tw-text-opacity, 1))}.text-amber-700{--tw-text-opacity:1;color:rgb(180 83 9 / var(--tw-text-opacity, 1))}.text-amber-800{--tw-text-opacity:1;color:rgb(146 64 14 / var(--tw-text-opacity, 1))}.text-api-text{--tw-text-opacity:1;color:rgb(146 64 14 / var(--tw-text-opacity, 1))}.text-blue-300{--tw-text-opacity:1;color:rgb(147 197 253 / var(--tw-text-opacity, 1))}.text-blue-600{--tw-text-opacity:1;color:rgb(37 99 235 / var(--tw-text-opacity, 1))}.text-blue-700{--tw-text-opacity:1;color:rgb(29 78 216 / var(--tw-text-opacity, 1))}.text-data-text{--tw-text-opacity:1;color:rgb(30 64 175 / var(--tw-text-opacity, 1))}.text-green-600{--tw-text-opacity:1;color:rgb(22 163 74 / var(--tw-text-opacity, 1))}.text-green-700{--tw-text-opacity:1;color:rgb(21 128 61 / var(--tw-text-opacity, 1))}.text-green-800{--tw-text-opacity:1;color:rgb(22 101 52 / var(--tw-text-opacity, 1))}.text-orange-300{--tw-text-opacity:1;color:rgb(253 186 116 / var(--tw-text-opacity, 1))}.text-orange-600{--tw-text-opacity:1;color:rgb(234 88 12 / var(--tw-text-opacity, 1))}.text-orange-700{--tw-text-opacity:1;color:rgb(194 65 12 / var(--tw-text-opacity, 1))}.text-orange-800{--tw-text-opacity:1;color:rgb(154 52 18 / var(--tw-text-opacity, 1))}.text-purple-300{--tw-text-opacity:1;color:rgb(216 180 254 / var(--tw-text-opacity, 1))}.text-purple-600{--tw-text-opacity:1;color:rgb(147 51 234 / var(--tw-text-opacity, 1))}.text-purple-700{--tw-text-opacity:1;color:rgb(126 34 206 / var(--tw-text-opacity, 1))}.text-purple-800{--tw-text-opacity:1;color:rgb(107 33 168 / var(--tw-text-opacity, 1))}.text-rl-text{--tw-text-opacity:1;color:rgb(107 33 168 / var(--tw-text-opacity, 1))}.text-rule-text{--tw-text-opacity:1;color:rgb(22 101 52 / var(--tw-text-opacity, 1))}.text-slate-300{--tw-text-opacity:1;color:rgb(203 213 225 / var(--tw-text-opacity, 1))}.text-slate-400{--tw-text-opacity:1;color:rgb(148 163 184 / var(--tw-text-opacity, 1))}.text-slate-500{--tw-text-opacity:1;color:rgb(100 116 139 / var(--tw-text-opacity, 1))}.text-slate-600{--tw-text-opacity:1;color:rgb(71 85 105 / var(--tw-text-opacity, 1))}.text-slate-700{--tw-text-opacity:1;color:rgb(51 65 85 / var(--tw-text-opacity, 1))}.text-slate-800{--tw-text-opacity:1;color:rgb(30 41 59 / var(--tw-text-opacity, 1))}.text-slate-900{--tw-text-opacity:1;color:rgb(15 23 42 / var(--tw-text-opacity, 1))}.text-teal-600{--tw-text-opacity:1;color:rgb(13 148 136 / var(--tw-text-opacity, 1))}.text-violet-600{--tw-text-opacity:1;color:rgb(124 58 237 / var(--tw-text-opacity, 1))}.text-violet-700{--tw-text-opacity:1;color:rgb(109 40 217 / var(--tw-text-opacity, 1))}.text-white{--tw-text-opacity:1;color:rgb(255 255 255 / var(--tw-text-opacity, 1))}.antialiased{-webkit-font-smoothing:antialiased;-moz-osx-font-smoothing:grayscale}@media (min-width: 768px){.md\:col-span-2{grid-column:span 2 / span 2}.md\:col-span-3{grid-column:span 3 / span 3}.md\:block{display:block}.md\:flex{display:flex}.md\:hidden{display:none}.md\:grid-cols-12{grid-template-columns:repeat(12, minmax(0, 1fr))}.md\:grid-cols-3{grid-template-columns:repeat(3, minmax(0, 1fr))}.md\:grid-cols-4{grid-template-columns:repeat(4, minmax(0, 1fr))}.md\:grid-cols-5{grid-template-columns:repeat(5, minmax(0, 1fr))}}</style></head>
+<body class="bg-slate-50 text-slate-800 antialiased">
+
+<div class="max-w-6xl mx-auto px-6 py-10">
+
+  <!-- Header -->
+  <header class="mb-8">
+    <h1 class="text-3xl font-bold text-slate-900 mb-2">Agent 自进化学习系统 — 三层架构</h1>
+    <p class="text-lg text-slate-500">Agent 犯错 → 三层学习系统逐级提炼 → 下次自动避免同类错误</p>
+    <div class="flex flex-wrap gap-3 mt-5">
+      <span class="inline-flex items-center gap-1.5 px-3 py-1.5 rounded-lg text-sm font-medium bg-rule-fill text-rule-text border border-rule-border">
+        <span class="w-3 h-3 rounded-full bg-green-500"></span>规则（无 AI）
+      </span>
+      <span class="inline-flex items-center gap-1.5 px-3 py-1.5 rounded-lg text-sm font-medium bg-rl-fill text-rl-text border border-rl-border">
+        <span class="w-3 h-3 rounded-full bg-purple-600"></span>RL 训练的专用模型 (Qwen3.5-32B)
+      </span>
+      <span class="inline-flex items-center gap-1.5 px-3 py-1.5 rounded-lg text-sm font-medium bg-api-fill text-api-text border border-api-border">
+        <span class="w-3 h-3 rounded-full bg-amber-500"></span>通用 LLM API
+      </span>
+      <span class="inline-flex items-center gap-1.5 px-3 py-1.5 rounded-lg text-sm font-medium bg-data-fill text-data-text border border-data-border">
+        <span class="w-3 h-3 rounded-full bg-blue-500"></span>数据存储
+      </span>
+    </div>
+  </header>
+
+  <!-- ==================== LAYER 1 ==================== -->
+  <section class="mb-3">
+    <div class="flex gap-4">
+      <!-- Layer badge -->
+      <div class="hidden md:flex flex-shrink-0 w-14 items-stretch">
+        <div class="w-full rounded-2xl bg-blue-600 flex items-center justify-center">
+          <span class="layer-badge text-white font-bold text-sm tracking-wider">LAYER 1</span>
+        </div>
+      </div>
+
+      <div class="flex-1">
+        <div class="flex items-center gap-3 mb-3">
+          <span class="md:hidden flex-shrink-0 px-3 py-1 rounded-lg bg-blue-600 text-white text-sm font-bold">L1</span>
+          <div>
+            <h2 class="text-lg font-bold text-slate-900">实时层 — 信号捕获 + 风险拦截</h2>
+            <p class="text-sm text-slate-500">每次对话实时触发 | <code class="text-[11px] bg-slate-100 px-1 rounded">layer1/signal_capture.py</code> + <code class="text-[11px] bg-slate-100 px-1 rounded">layer1/quick_think.py</code></p>
+          </div>
+        </div>
+
+        <div class="bg-blue-50 border border-blue-200 rounded-2xl p-5">
+          <div class="grid grid-cols-1 md:grid-cols-12 gap-3 items-center">
+
+            <!-- User -->
+            <div class="md:col-span-2 card bg-white rounded-xl border-2 border-slate-300 px-4 py-3 text-center">
+              <p class="font-bold text-sm">用户</p>
+              <p class="text-[10px] text-slate-500">下达任务指令</p>
+            </div>
+
+            <svg class="hidden md:block w-6 h-5 text-slate-400 mx-auto" viewBox="0 0 20 14"><path d="M2 7h14m0 0l-4-4m4 4l-4 4" stroke="currentColor" stroke-width="1.5" fill="none" stroke-linecap="round" stroke-linejoin="round"></path></svg>
+
+            <!-- QuickThink -->
+            <div class="md:col-span-3 card rounded-xl border-2 border-rule-border bg-rule-fill px-4 py-3">
+              <div class="flex items-center gap-2 mb-1">
+                <span class="w-5 h-5 rounded-full bg-green-500 text-white flex items-center justify-center text-[10px] font-bold">Q</span>
+                <p class="font-bold text-rule-text text-sm">QuickThink 风险拦截</p>
+              </div>
+              <p class="text-[11px] text-slate-600">查询 taxonomy 关键词索引</p>
+              <p class="text-[11px] text-slate-600">命中 → 注入风险提示到 prompt</p>
+              <span class="inline-block mt-1 text-[10px] font-mono px-1.5 py-0.5 bg-green-100 text-green-700 rounded">纯规则 + 关键词匹配</span>
+            </div>
+
+            <svg class="hidden md:block w-6 h-5 text-slate-400 mx-auto" viewBox="0 0 20 14"><path d="M2 7h14m0 0l-4-4m4 4l-4 4" stroke="currentColor" stroke-width="1.5" fill="none" stroke-linecap="round" stroke-linejoin="round"></path></svg>
+
+            <!-- Agent -->
+            <div class="md:col-span-2 card rounded-xl border-2 border-slate-300 bg-white px-4 py-3 text-center">
+              <p class="font-bold text-sm">Agent 执行</p>
+              <p class="text-[10px] text-slate-500">调用工具完成指令</p>
+            </div>
+
+            <svg class="hidden md:block w-6 h-5 text-slate-400 mx-auto" viewBox="0 0 20 14"><path d="M2 7h14m0 0l-4-4m4 4l-4 4" stroke="currentColor" stroke-width="1.5" fill="none" stroke-linecap="round" stroke-linejoin="round"></path></svg>
+
+            <!-- Signal Capture -->
+            <div class="md:col-span-3 card rounded-xl border-2 border-rule-border bg-rule-fill px-4 py-3">
+              <div class="flex items-center gap-2 mb-1">
+                <span class="w-5 h-5 rounded-full bg-green-500 text-white flex items-center justify-center text-[10px] font-bold">S</span>
+                <p class="font-bold text-rule-text text-sm">Signal Capture</p>
+              </div>
+              <p class="text-[11px] text-slate-600 mb-1">判断是否值得学习</p>
+              <div class="text-[10px] text-slate-500 space-y-0.5">
+                <p>1. user_correction (用户纠正)</p>
+                <p>2. self_recovery (自修复)</p>
+                <p>3. unresolved_error (未解决)</p>
+                <p>4. efficiency_anomaly (步骤异常)</p>
+              </div>
+              <span class="inline-block mt-1 text-[10px] font-mono px-1.5 py-0.5 bg-green-100 text-green-700 rounded">纯规则判断</span>
+            </div>
+          </div>
+
+          <!-- Output -->
+          <div class="flex justify-center gap-4 mt-4">
+            <div class="card rounded-lg border-2 border-data-border bg-data-fill px-4 py-2 text-center">
+              <p class="font-bold text-data-text text-xs">Signal YAML</p>
+              <p class="text-[10px] text-slate-500 font-mono">sig-*.yaml</p>
+            </div>
+            <div class="card rounded-lg border-2 border-data-border bg-data-fill px-4 py-2 text-center">
+              <p class="font-bold text-data-text text-xs">Session JSONL</p>
+              <p class="text-[10px] text-slate-500 font-mono">session-*.jsonl</p>
+            </div>
+          </div>
+        </div>
+      </div>
+    </div>
+  </section>
+
+  <div class="connector mx-auto"></div>
+
+  <!-- ==================== LAYER 2 ==================== -->
+  <section class="mb-3">
+    <div class="flex gap-4">
+      <div class="hidden md:flex flex-shrink-0 w-14 items-stretch">
+        <div class="w-full rounded-2xl bg-purple-700 flex items-center justify-center">
+          <span class="layer-badge text-white font-bold text-sm tracking-wider">LAYER 2</span>
+        </div>
+      </div>
+
+      <div class="flex-1">
+        <div class="flex items-center gap-3 mb-3">
+          <span class="md:hidden flex-shrink-0 px-3 py-1 rounded-lg bg-purple-700 text-white text-sm font-bold">L2</span>
+          <div>
+            <h2 class="text-lg font-bold text-slate-900">近实时层 — 经验提炼 + 知识构建</h2>
+            <p class="text-sm text-slate-500">有 user_correction 信号时立即触发，否则攒 ≥2 条或 ≥8h | <code class="text-[11px] bg-slate-100 px-1 rounded">layer2/orchestrator.py</code></p>
+          </div>
+        </div>
+
+        <div class="bg-purple-50 border border-purple-200 rounded-2xl p-5">
+
+          <!-- Pipeline -->
+          <div class="grid grid-cols-1 md:grid-cols-5 gap-3 mb-4">
+
+            <!-- Materialize -->
+            <div class="card rounded-xl border-2 border-rl-border bg-rl-fill p-4">
+              <span class="inline-block px-1.5 py-0.5 bg-purple-200 text-purple-800 text-[10px] font-bold rounded mb-1">Step 0</span>
+              <h4 class="font-bold text-rl-text text-sm">信号物化</h4>
+              <p class="text-[10px] text-slate-600 mt-1">Signal + Session → Experience</p>
+              <p class="text-[10px] text-slate-500">提取: 场景 / 根因 / 解法</p>
+              <span class="inline-block mt-2 text-[10px] font-semibold px-1.5 py-0.5 bg-purple-100 text-purple-700 rounded">Qwen3.5-32B</span>
+              <p class="text-[9px] text-slate-400 mt-0.5 font-mono">materialize.py</p>
+            </div>
+
+            <!-- Consolidate -->
+            <div class="card rounded-xl border-2 border-rule-border bg-rule-fill p-4">
+              <span class="inline-block px-1.5 py-0.5 bg-green-200 text-green-800 text-[10px] font-bold rounded mb-1">Step 1</span>
+              <h4 class="font-bold text-rule-text text-sm">经验聚类</h4>
+              <p class="text-[10px] text-slate-600 mt-1">相似 Experience → Cluster</p>
+              <p class="text-[10px] text-slate-500">LLM 判断 same_class</p>
+              <span class="inline-block mt-2 text-[10px] font-mono px-1.5 py-0.5 bg-green-100 text-green-700 rounded">规则 + 向量匹配</span>
+              <p class="text-[9px] text-slate-400 mt-0.5 font-mono">consolidate.py</p>
+            </div>
+
+            <!-- Taxonomy Build -->
+            <div class="card rounded-xl border-2 border-rl-border bg-rl-fill p-4">
+              <span class="inline-block px-1.5 py-0.5 bg-purple-200 text-purple-800 text-[10px] font-bold rounded mb-1">Step 2</span>
+              <h4 class="font-bold text-rl-text text-sm">分类构建</h4>
+              <p class="text-[10px] text-slate-600 mt-1">Cluster → TaxonomyEntry</p>
+              <p class="text-[10px] text-slate-500">触发条件 / fix_sop / 预防</p>
+              <span class="inline-block mt-2 text-[10px] font-semibold px-1.5 py-0.5 bg-purple-100 text-purple-700 rounded">Qwen3.5-32B</span>
+              <p class="text-[9px] text-slate-400 mt-0.5 font-mono">taxonomy.py</p>
+            </div>
+
+            <!-- Skill Evolve -->
+            <div class="card rounded-xl border-2 border-api-border bg-api-fill p-4">
+              <span class="inline-block px-1.5 py-0.5 bg-amber-200 text-amber-800 text-[10px] font-bold rounded mb-1">Step 3</span>
+              <h4 class="font-bold text-api-text text-sm">技能生成</h4>
+              <p class="text-[10px] text-slate-600 mt-1">Taxonomy → SKILL.md</p>
+              <p class="text-[10px] text-slate-500">生成可注入 Agent 的规则</p>
+              <span class="inline-block mt-2 text-[10px] font-mono px-1.5 py-0.5 bg-amber-100 text-amber-700 rounded">通用 LLM API</span>
+              <p class="text-[9px] text-slate-400 mt-0.5 font-mono">skill_evolve.py</p>
+            </div>
+
+            <!-- Sync -->
+            <div class="card rounded-xl border-2 border-rule-border bg-rule-fill p-4">
+              <span class="inline-block px-1.5 py-0.5 bg-green-200 text-green-800 text-[10px] font-bold rounded mb-1">Step 4</span>
+              <h4 class="font-bold text-rule-text text-sm">同步回注</h4>
+              <p class="text-[10px] text-slate-600 mt-1">写入 Agent 配置目录</p>
+              <p class="text-[10px] text-slate-500">SKILL.md + taxonomy index</p>
+              <span class="inline-block mt-2 text-[10px] font-mono px-1.5 py-0.5 bg-green-100 text-green-700 rounded">文件写入，无 AI</span>
+              <p class="text-[9px] text-slate-400 mt-0.5 font-mono">sync_nobot.py</p>
+            </div>
+          </div>
+
+          <!-- Fast track note -->
+          <div class="bg-white rounded-xl border border-purple-200 p-3 flex items-start gap-2">
+            <span class="flex-shrink-0 w-5 h-5 rounded-full bg-purple-500 text-white text-[10px] flex items-center justify-center font-bold mt-0.5">!</span>
+            <p class="text-[11px] text-slate-600"><strong class="text-purple-700">Fast-track 机制：</strong>user_correction 信号跳过 Step 1 聚类，直接从 Step 0 → Step 2 → Step 3 → Step 4，确保用户纠正最快生效。</p>
+          </div>
+
+          <!-- Data outputs -->
+          <div class="flex flex-wrap justify-center gap-3 mt-4">
+            <div class="card rounded-lg border-2 border-data-border bg-data-fill px-3 py-2 text-center">
+              <p class="font-bold text-data-text text-[11px]">经验库</p>
+              <p class="text-[10px] text-slate-500 font-mono">exp-*.yaml</p>
+            </div>
+            <div class="card rounded-lg border-2 border-data-border bg-data-fill px-3 py-2 text-center">
+              <p class="font-bold text-data-text text-[11px]">聚类索引</p>
+              <p class="text-[10px] text-slate-500 font-mono">clusters.json</p>
+            </div>
+            <div class="card rounded-lg border-2 border-data-border bg-data-fill px-3 py-2 text-center">
+              <p class="font-bold text-data-text text-[11px]">错误分类库</p>
+              <p class="text-[10px] text-slate-500 font-mono">taxonomy.yaml</p>
+            </div>
+            <div class="card rounded-lg border-2 border-data-border bg-data-fill px-3 py-2 text-center">
+              <p class="font-bold text-data-text text-[11px]">技能文件</p>
+              <p class="text-[10px] text-slate-500 font-mono">SKILL.md</p>
+            </div>
+          </div>
+        </div>
+      </div>
+    </div>
+  </section>
+
+  <div class="connector mx-auto"></div>
+
+  <!-- ==================== LAYER 3 ==================== -->
+  <section class="mb-3">
+    <div class="flex gap-4">
+      <div class="hidden md:flex flex-shrink-0 w-14 items-stretch">
+        <div class="w-full rounded-2xl bg-orange-600 flex items-center justify-center">
+          <span class="layer-badge text-white font-bold text-sm tracking-wider">LAYER 3</span>
+        </div>
+      </div>
+
+      <div class="flex-1">
+        <div class="flex items-center gap-3 mb-3">
+          <span class="md:hidden flex-shrink-0 px-3 py-1 rounded-lg bg-orange-600 text-white text-sm font-bold">L3</span>
+          <div>
+            <h2 class="text-lg font-bold text-slate-900">离线深度层 — 跨任务洞察 + 能力补全</h2>
+            <p class="text-sm text-slate-500">每周运行一次，经验池积累足够后触发 | <code class="text-[11px] bg-slate-100 px-1 rounded">layer3/orchestrator.py</code></p>
+          </div>
+        </div>
+
+        <div class="bg-orange-50 border border-orange-200 rounded-2xl p-5">
+          <div class="grid grid-cols-1 md:grid-cols-3 gap-4">
+
+            <!-- Cross-task mining -->
+            <div class="card bg-white rounded-xl border border-orange-200 p-4">
+              <div class="flex items-center gap-2 mb-2">
+                <span class="w-6 h-6 rounded-full bg-orange-100 text-orange-700 flex items-center justify-center text-[10px] font-bold">1</span>
+                <h4 class="font-bold text-orange-800 text-sm">跨任务模式挖掘</h4>
+              </div>
+              <p class="text-[11px] text-slate-600">分析不同 task_type 间的共同错误模式</p>
+              <p class="text-[10px] text-slate-500 mt-1">例: "coding 和 devops 都有不可逆操作风险"</p>
+              <span class="inline-block mt-2 text-[10px] font-mono px-1.5 py-0.5 bg-amber-100 text-amber-700 rounded">LLM API</span>
+              <p class="text-[9px] text-slate-400 mt-0.5 font-mono">cross_task_miner.py</p>
+            </div>
+
+            <!-- Capability gaps -->
+            <div class="card bg-white rounded-xl border border-orange-200 p-4">
+              <div class="flex items-center gap-2 mb-2">
+                <span class="w-6 h-6 rounded-full bg-orange-100 text-orange-700 flex items-center justify-center text-[10px] font-bold">2</span>
+                <h4 class="font-bold text-orange-800 text-sm">能力缺口检测</h4>
+              </div>
+              <p class="text-[11px] text-slate-600">发现 Agent 反复犯错但无对应 taxonomy 的领域</p>
+              <p class="text-[10px] text-slate-500 mt-1">识别需要新增训练数据的方向</p>
+              <span class="inline-block mt-2 text-[10px] font-mono px-1.5 py-0.5 bg-amber-100 text-amber-700 rounded">LLM API</span>
+              <p class="text-[9px] text-slate-400 mt-0.5 font-mono">new_capability.py</p>
+            </div>
+
+            <!-- Memory architect -->
+            <div class="card bg-white rounded-xl border border-orange-200 p-4">
+              <div class="flex items-center gap-2 mb-2">
+                <span class="w-6 h-6 rounded-full bg-orange-100 text-orange-700 flex items-center justify-center text-[10px] font-bold">3</span>
+                <h4 class="font-bold text-orange-800 text-sm">记忆架构优化</h4>
+              </div>
+              <p class="text-[11px] text-slate-600">建议合并冗余 taxonomy、淘汰低置信条目</p>
+              <p class="text-[10px] text-slate-500 mt-1">保持知识库精简高效</p>
+              <span class="inline-block mt-2 text-[10px] font-mono px-1.5 py-0.5 bg-amber-100 text-amber-700 rounded">LLM API</span>
+              <p class="text-[9px] text-slate-400 mt-0.5 font-mono">memory_architect.py</p>
+            </div>
+          </div>
+
+          <div class="bg-white rounded-xl border border-orange-200 p-3 mt-3 flex items-start gap-2">
+            <span class="flex-shrink-0 w-5 h-5 rounded-full bg-orange-500 text-white text-[10px] flex items-center justify-center font-bold mt-0.5">i</span>
+            <p class="text-[11px] text-slate-600"><strong class="text-orange-700">Layer 3 的输出</strong>反馈到 Layer 2：跨任务模式 → 丰富 taxonomy；能力缺口 → 指导新数据收集；记忆优化 → 清理 taxonomy。</p>
+          </div>
+        </div>
+      </div>
+    </div>
+  </section>
+
+  <div class="connector mx-auto"></div>
+
+  <!-- ==================== RL TRAINING ==================== -->
+  <section class="mb-3">
+    <div class="flex gap-4">
+      <div class="hidden md:flex flex-shrink-0 w-14 items-stretch">
+        <div class="w-full rounded-2xl bg-violet-800 flex items-center justify-center">
+          <span class="layer-badge text-white font-bold text-sm tracking-wider">RL 训练</span>
+        </div>
+      </div>
+
+      <div class="flex-1">
+        <div class="flex items-center gap-3 mb-3">
+          <span class="md:hidden flex-shrink-0 px-3 py-1 rounded-lg bg-violet-800 text-white text-sm font-bold">RL</span>
+          <div>
+            <h2 class="text-lg font-bold text-slate-900">离线 RL — 持续优化 Layer 2 中 AI 模型</h2>
+            <p class="text-sm text-slate-500">周期性执行 | GRPO + SAVR 五组分奖励 | 提升信号物化与分类构建质量</p>
+          </div>
+        </div>
+
+        <div class="bg-rl-bg border-2 border-rl-border rounded-2xl p-5">
+          <div class="grid grid-cols-1 md:grid-cols-4 gap-3">
+
+            <div class="card rounded-xl border border-data-border bg-data-fill p-3">
+              <p class="font-bold text-data-text text-xs mb-2">训练数据</p>
+              <p class="text-[10px] text-slate-600">Layer 1 采集的 Signal + Session</p>
+              <p class="text-[10px] text-slate-600">Layer 2 生成的 Experience</p>
+              <p class="text-[10px] text-slate-400 mt-1">合成 ~700 条三元组</p>
+            </div>
+
+            <div class="card rounded-xl border-2 border-rl-border bg-rl-fill p-3">
+              <p class="font-bold text-rl-text text-xs mb-2">两阶段训练</p>
+              <div class="space-y-1.5">
+                <div class="bg-white rounded px-2 py-1.5">
+                  <p class="text-[10px] font-semibold text-purple-700">Phase 1: SFT 冷启动</p>
+                  <p class="text-[10px] text-slate-500">学会输出合法 JSON</p>
+                </div>
+                <div class="bg-white rounded px-2 py-1.5">
+                  <p class="text-[10px] font-semibold text-purple-700">Phase 2: GRPO 强化</p>
+                  <p class="text-[10px] text-slate-500">4 候选 × SAVR 打分</p>
+                </div>
+              </div>
+            </div>
+
+            <div class="card rounded-xl border-2 border-rl-border bg-rl-fill p-3">
+              <p class="font-bold text-rl-text text-xs mb-2">SAVR 五组分奖励</p>
+              <div class="text-[10px] text-slate-600 space-y-1">
+                <p><span class="text-slate-400">F:</span> 格式合规 [-1, +0.2]</p>
+                <p><span class="text-teal-600">K:</span> 关键词锚定 [0, +0.15]</p>
+                <p><span class="text-blue-600">E:</span> 实体锚定 [0, +0.30]</p>
+                <p><span class="text-green-600">A:</span> Resolution 对齐 [-0.1, +0.35]</p>
+                <p><span class="text-amber-600">P:</span> LLM Judge + session [±0.20]</p>
+              </div>
+              <p class="text-[9px] text-slate-400 mt-1">按信号类型自适应激活 · 详见 RL 训练链路图</p>
+            </div>
+
+            <div class="card rounded-xl border-2 border-rl-border bg-rl-fill p-3">
+              <p class="font-bold text-rl-text text-xs mb-2">Qwen3.5-32B-A3B</p>
+              <ul class="text-[10px] text-slate-600 space-y-0.5">
+                <li>MoE: 32B 总参 / 3B 激活</li>
+                <li>训练: 8×A100, LoRA r=32</li>
+                <li>推理: 单卡即可</li>
+              </ul>
+              <div class="mt-2 bg-green-50 rounded px-2 py-1 border border-green-200">
+                <p class="text-[10px] text-green-700 font-semibold">替换 Layer 2 Step 0 + Step 2</p>
+                <p class="text-[9px] text-slate-500">materialize + taxonomy build</p>
+              </div>
+            </div>
+          </div>
+        </div>
+      </div>
+    </div>
+  </section>
+
+  <div class="connector mx-auto"></div>
+
+  <!-- ==================== FEEDBACK LOOP ==================== -->
+  <section class="mb-8">
+    <div class="bg-slate-900 text-white rounded-2xl p-6">
+      <h3 class="font-bold text-base mb-4">三层闭环：知识如何回注 Agent</h3>
+      <div class="grid grid-cols-1 md:grid-cols-3 gap-4">
+        <div class="bg-white/10 rounded-xl p-4">
+          <p class="font-bold text-blue-300 text-sm mb-2">Layer 1 ← Layer 2</p>
+          <p class="text-[11px] text-slate-300"><strong>QuickThink</strong> 读取 taxonomy 关键词索引</p>
+          <p class="text-[11px] text-slate-300 mt-1">→ 用户下次遇到类似场景时，Agent 自动收到风险提示</p>
+          <p class="text-[11px] text-slate-300 mt-1">→ <strong>SKILL.md</strong> 注入 Agent system prompt，改变行为模式</p>
+        </div>
+        <div class="bg-white/10 rounded-xl p-4">
+          <p class="font-bold text-orange-300 text-sm mb-2">Layer 2 ← Layer 3</p>
+          <p class="text-[11px] text-slate-300">跨任务模式 → 丰富 taxonomy 的 coverage</p>
+          <p class="text-[11px] text-slate-300 mt-1">能力缺口 → 指导合成新的训练场景</p>
+          <p class="text-[11px] text-slate-300 mt-1">记忆优化 → 合并冗余 / 淘汰低置信条目</p>
+        </div>
+        <div class="bg-white/10 rounded-xl p-4">
+          <p class="font-bold text-purple-300 text-sm mb-2">Layer 2 ← RL 训练</p>
+          <p class="text-[11px] text-slate-300">训练后的 Qwen3.5-32B 替换 Step 0 和 Step 2</p>
+          <p class="text-[11px] text-slate-300 mt-1">→ 更准确的 materialize → 更高质量的 Experience</p>
+          <p class="text-[11px] text-slate-300 mt-1">→ 更好的 Experience → 更好的 Taxonomy → Agent 行为改善</p>
+          <p class="text-[10px] text-amber-400 font-semibold mt-2">分析质量驱动的自进化闭环</p>
+        </div>
+      </div>
+    </div>
+  </section>
+
+  <!-- ==================== ARCHITECTURE OVERVIEW ==================== -->
+  <section class="mb-8">
+    <div class="bg-white border border-slate-200 rounded-2xl p-6">
+      <h3 class="font-bold text-slate-800 text-base mb-4">架构速查表</h3>
+      <div class="overflow-x-auto">
+        <table class="w-full text-xs text-left">
+          <thead>
+            <tr class="border-b-2 border-slate-200">
+              <th class="py-2 pr-3 font-semibold text-slate-600 w-20">层级</th>
+              <th class="py-2 px-3 font-semibold text-slate-600">触发频率</th>
+              <th class="py-2 px-3 font-semibold text-slate-600">核心组件</th>
+              <th class="py-2 px-3 font-semibold text-slate-600">AI 类型</th>
+              <th class="py-2 pl-3 font-semibold text-slate-600">输出</th>
+            </tr>
+          </thead>
+          <tbody class="text-slate-600">
+            <tr class="border-b border-slate-100">
+              <td class="py-2.5 pr-3"><span class="px-2 py-0.5 bg-blue-100 text-blue-700 rounded font-bold text-[10px]">Layer 1</span></td>
+              <td class="py-2.5 px-3 font-medium">每次对话</td>
+              <td class="py-2.5 px-3">Signal Capture + QuickThink</td>
+              <td class="py-2.5 px-3"><span class="text-green-600 font-semibold">无 AI（纯规则）</span></td>
+              <td class="py-2.5 pl-3">Signal YAML, Session JSONL</td>
+            </tr>
+            <tr class="border-b border-slate-100">
+              <td class="py-2.5 pr-3"><span class="px-2 py-0.5 bg-purple-100 text-purple-700 rounded font-bold text-[10px]">Layer 2</span></td>
+              <td class="py-2.5 px-3 font-medium">有信号时触发</td>
+              <td class="py-2.5 px-3">Materialize → Consolidate → Taxonomy → Skill → Sync</td>
+              <td class="py-2.5 px-3"><span class="text-purple-600 font-semibold">RL 模型</span> + 规则</td>
+              <td class="py-2.5 pl-3">Experience, Taxonomy, SKILL.md</td>
+            </tr>
+            <tr class="border-b border-slate-100">
+              <td class="py-2.5 pr-3"><span class="px-2 py-0.5 bg-orange-100 text-orange-700 rounded font-bold text-[10px]">Layer 3</span></td>
+              <td class="py-2.5 px-3 font-medium">每周一次</td>
+              <td class="py-2.5 px-3">Cross-task Mining → Capability Gaps → Memory Optimization</td>
+              <td class="py-2.5 px-3"><span class="text-amber-600 font-semibold">通用 LLM API</span></td>
+              <td class="py-2.5 pl-3">跨任务模式, 能力缺口, 优化建议</td>
+            </tr>
+            <tr>
+              <td class="py-2.5 pr-3"><span class="px-2 py-0.5 bg-violet-100 text-violet-700 rounded font-bold text-[10px]">RL 训练</span></td>
+              <td class="py-2.5 px-3 font-medium">周期性离线</td>
+              <td class="py-2.5 px-3">SFT → GRPO (N=4, SAVR reward)</td>
+              <td class="py-2.5 px-3"><span class="text-violet-600 font-semibold">Qwen3.5-32B LoRA</span></td>
+              <td class="py-2.5 pl-3">优化后的 Layer 2 模型</td>
+            </tr>
+          </tbody>
+        </table>
+      </div>
+    </div>
+  </section>
+
+  <!-- Example -->
+  <section class="mb-6">
+    <details class="bg-amber-50 border border-amber-300 rounded-2xl overflow-hidden">
+      <summary class="px-6 py-4 font-bold text-amber-800 text-base flex items-center gap-2 cursor-pointer">
+        <svg class="w-4 h-4" viewBox="0 0 20 20" fill="currentColor"><path fill-rule="evenodd" d="M5.23 7.21a.75.75 0 011.06.02L10 11.168l3.71-3.938a.75.75 0 111.08 1.04l-4.25 4.5a.75.75 0 01-1.08 0l-4.25-4.5a.75.75 0 01.02-1.06z" clip-rule="evenodd"></path></svg>
+        展开：举例理解三层如何协作
+      </summary>
+      <div class="px-6 pb-5">
+        <div class="grid grid-cols-1 md:grid-cols-4 gap-3 text-sm text-slate-700">
+          <div>
+            <p class="font-bold text-blue-700 text-xs mb-2">Layer 1 (实时)</p>
+            <div class="bg-white rounded-lg p-3 border border-amber-200 text-xs space-y-1.5">
+              <p>用户: "帮我删除 ~/old-project"</p>
+              <p>QuickThink: (无已知风险，放行)</p>
+              <p>Agent: 直接 rm -rf</p>
+              <p>用户: "以后先列出内容让我确认！"</p>
+              <p class="text-blue-600 font-semibold">→ 捕获 user_correction Signal</p>
+            </div>
+          </div>
+          <div>
+            <p class="font-bold text-purple-700 text-xs mb-2">Layer 2 (立即触发)</p>
+            <div class="bg-white rounded-lg p-3 border border-amber-200 text-xs space-y-1.5">
+              <p><span class="text-purple-600">物化:</span> "未经确认直接删除"</p>
+              <p><span class="text-purple-600">分类:</span> 新增 taxonomy "危险操作确认"</p>
+              <p><span class="text-purple-600">技能:</span> 生成 SKILL.md 条目</p>
+              <p><span class="text-purple-600">同步:</span> 写入 Agent 配置</p>
+              <p class="text-green-600 font-semibold">→ 下次 QuickThink 会拦截</p>
+            </div>
+          </div>
+          <div>
+            <p class="font-bold text-orange-700 text-xs mb-2">Layer 3 (周末)</p>
+            <div class="bg-white rounded-lg p-3 border border-amber-200 text-xs space-y-1.5">
+              <p>发现: coding 和 devops 都有"不可逆操作"模式</p>
+              <p>建议: 合并为跨领域通用规则</p>
+              <p>检测: "数据库操作"能力缺口</p>
+              <p class="text-orange-600 font-semibold">→ 丰富 taxonomy coverage</p>
+            </div>
+          </div>
+          <div>
+            <p class="font-bold text-violet-700 text-xs mb-2">RL (下次训练)</p>
+            <div class="bg-white rounded-lg p-3 border border-amber-200 text-xs space-y-1.5">
+              <p>用此次 Signal + Session 训练</p>
+              <p>SAVR: session_context 验证分析准确性</p>
+              <p>模型学会: 遇到删除场景 → 输出"先列出内容"</p>
+              <p class="text-violet-600 font-semibold">→ Layer 2 分析质量提升</p>
+            </div>
+          </div>
+        </div>
+      </div>
+    </details>
+  </section>
+
+  <!-- One-liner -->
+  <div class="text-center border-t border-slate-200 pt-5 pb-4">
+    <p class="text-base text-slate-600">
+      <span class="font-bold text-slate-800">一句话总结：</span>
+      Layer 1 实时捕获 → Layer 2 近实时提炼 → Layer 3 深度洞察 → RL 训练优化分析模型 → 形成自进化闭环
+    </p>
+  </div>
+
+</div>
+
+
+</body></html>
