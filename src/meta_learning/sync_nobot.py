@@ -1,9 +1,13 @@
-"""Sync error taxonomy to nanobot workspace (SKILL.md + rules/*.md).
+"""Sync error taxonomy to nanobot workspace (SKILL.md + rules/*.md + AGENTS.md).
 
 SKILL.md is injected into every nanobot conversation (always:true) as a
 concise natural-language summary (~200-300 tokens).  rules/*.md files are
 generated for human review / debugging only — agents use `quick_think` MCP
 tool to retrieve detailed guidance at runtime.
+
+AGENTS.md is the agent's primary instruction file.  ``install.sh`` injects a
+delimited section so the agent knows *when* and *how* to call meta-learning
+tools.  The section is replaced on upgrade and removed on uninstall.
 """
 
 from __future__ import annotations
@@ -222,3 +226,92 @@ def sync_taxonomy_to_nobot_workspace(
         logger.info("Wrote rules/%s.md (%d entries)", cat, len(cat_entries))
 
     return result
+
+
+# ---------------------------------------------------------------------------
+# AGENTS.md injection
+# ---------------------------------------------------------------------------
+
+AGENTS_MD_BEGIN = "<!-- meta-learning:begin -->"
+AGENTS_MD_END = "<!-- meta-learning:end -->"
+
+
+def render_agents_md_section() -> str:
+    """Return the delimited AGENTS.md section for meta-learning.
+
+    The block is wrapped in HTML-comment delimiters so ``inject_agents_md``
+    can replace it on upgrade and ``remove_agents_md_section`` can strip it
+    on uninstall.
+    """
+    return f"""{AGENTS_MD_BEGIN}
+## Meta-Learning 自进化学习
+
+你已安装 Meta-Learning 插件，它能从过去的错误中学习并持续改进。严格遵循以下规则：
+
+1. **会话开始时**：调用 `layer2_status` 检查学习系统状态。如果返回 "running"，等待片刻后重新检查再继续——此时 SKILL.md 可能尚未更新。
+2. **用户纠正/反驳你时**（最高优先级）：必须**立即**调用 `capture_signal`，将 `user_corrections` 设为用户的原话。仅回复"好的/明白了"是**不够的**，必须同时调用工具记录信号。
+3. **执行危险/不可逆操作前**：调用 `quick_think` 检查任务是否命中已知错误模式，获取风险评估和防范建议。
+4. **任务完成后**，如果遇到了以下任一情况，调用 `capture_signal` 记录学习信号：
+   - 执行过程中遇到错误（无论是否自行修复）
+   - 首次使用某个工具
+   - 步骤数明显偏多
+5. `capture_signal` 后 Layer 2 整合流水线会在后台自动运行，**无需**手动调用 `run_layer2`。
+
+示例：用户说"不对，应该用 X" → 调用 `capture_signal(user_corrections=["不对，应该用 X"])` → 回复用户。
+{AGENTS_MD_END}
+"""
+
+
+def inject_agents_md(agents_md_path: str | Path) -> bool:
+    """Inject or replace the meta-learning section in AGENTS.md.
+
+    Returns True if the file was modified, False if unchanged (content
+    identical to what would be written).
+    """
+    path = Path(agents_md_path).expanduser()
+    section = render_agents_md_section()
+
+    if path.exists():
+        content = path.read_text(encoding="utf-8")
+    else:
+        content = ""
+
+    if AGENTS_MD_BEGIN in content:
+        begin = content.index(AGENTS_MD_BEGIN)
+        end = content.index(AGENTS_MD_END) + len(AGENTS_MD_END)
+        while end < len(content) and content[end] in ("\n", "\r"):
+            end += 1
+        new_content = content[:begin] + section + content[end:]
+    else:
+        separator = "\n" if content and not content.endswith("\n") else ""
+        new_content = content + separator + section
+
+    if new_content == content:
+        return False
+
+    path.parent.mkdir(parents=True, exist_ok=True)
+    path.write_text(new_content, encoding="utf-8")
+    return True
+
+
+def remove_agents_md_section(agents_md_path: str | Path) -> bool:
+    """Remove the meta-learning section from AGENTS.md.
+
+    Returns True if the section was found and removed.
+    """
+    path = Path(agents_md_path).expanduser()
+    if not path.exists():
+        return False
+
+    content = path.read_text(encoding="utf-8")
+    if AGENTS_MD_BEGIN not in content:
+        return False
+
+    begin = content.index(AGENTS_MD_BEGIN)
+    end = content.index(AGENTS_MD_END) + len(AGENTS_MD_END)
+    while end < len(content) and content[end] in ("\n", "\r"):
+        end += 1
+    new_content = content[:begin] + content[end:]
+
+    path.write_text(new_content, encoding="utf-8")
+    return True

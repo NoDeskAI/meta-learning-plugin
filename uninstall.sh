@@ -12,6 +12,7 @@ echo "This will uninstall the meta-learning MCP plugin."
 echo ""
 echo "The following will be removed:"
 echo "  - MCP registration in nanobot/config.json"
+echo "  - Meta-learning instructions in AGENTS.md"
 echo "  - Data directory: ${DATA_DIR}"
 echo "  - Skills directory: ${SKILLS_DIR}"
 echo "  - Virtual environment: ${SCRIPT_DIR}/.venv"
@@ -41,6 +42,31 @@ if 'meta-learning' in servers:
 else:
     print('meta-learning not found in', path, '— skipping.')
 " 2>/dev/null || echo "WARNING: Failed to patch ${NANOBOT_CONFIG}. Remove \"meta-learning\" from tools.mcp_servers manually."
+fi
+
+# ---------- remove AGENTS.md instructions ----------
+
+AGENTS_MD="${WORKSPACE}/AGENTS.md"
+
+if [ -f "${AGENTS_MD}" ]; then
+    python3 -c "
+import re, pathlib
+
+path = pathlib.Path('${AGENTS_MD}')
+content = path.read_text(encoding='utf-8')
+marker = '<!-- meta-learning:begin -->'
+if marker in content:
+    cleaned = re.sub(
+        r'<!-- meta-learning:begin -->.*?<!-- meta-learning:end -->\n?',
+        '',
+        content,
+        flags=re.DOTALL,
+    )
+    path.write_text(cleaned, encoding='utf-8')
+    print('Removed meta-learning instructions from', str(path))
+else:
+    print('No meta-learning section in', str(path), '— skipping.')
+" 2>/dev/null || echo "WARNING: Failed to clean ${AGENTS_MD}. Remove the meta-learning section manually."
 fi
 
 # ---------- remove data & skills ----------
