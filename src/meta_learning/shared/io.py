@@ -26,7 +26,7 @@ def load_config(config_path: str | Path) -> MetaLearningConfig:
     path = Path(config_path)
     if not path.exists():
         return MetaLearningConfig()
-    with open(path) as f:
+    with open(path, encoding="utf-8") as f:
         raw = yaml.safe_load(f) or {}
     return MetaLearningConfig(**raw)
 
@@ -44,13 +44,13 @@ def write_signal(signal: Signal, config: MetaLearningConfig) -> Path:
     buf_dir = Path(config.signal_buffer_path)
     file_path = buf_dir / f"{signal.signal_id}.yaml"
     data = signal.model_dump(mode="json")
-    with open(file_path, "w") as f:
+    with open(file_path, "w", encoding="utf-8") as f:
         yaml.dump(data, f, default_flow_style=False, allow_unicode=True)
     return file_path
 
 
 def read_signal(file_path: str | Path) -> Signal:
-    with open(file_path) as f:
+    with open(file_path, encoding="utf-8") as f:
         raw = yaml.safe_load(f)
     return Signal(**raw)
 
@@ -83,13 +83,13 @@ def write_experience(experience: Experience, config: MetaLearningConfig) -> Path
     type_dir.mkdir(parents=True, exist_ok=True)
     file_path = type_dir / f"{experience.id}.yaml"
     data = experience.model_dump(mode="json")
-    with open(file_path, "w") as f:
+    with open(file_path, "w", encoding="utf-8") as f:
         yaml.dump(data, f, default_flow_style=False, allow_unicode=True)
     return file_path
 
 
 def read_experience(file_path: str | Path) -> Experience:
-    with open(file_path) as f:
+    with open(file_path, encoding="utf-8") as f:
         raw = yaml.safe_load(f)
     return Experience(**raw)
 
@@ -109,7 +109,7 @@ def load_experience_index(config: MetaLearningConfig) -> ExperienceIndex:
     index_path = pool_dir / "index.yaml"
     if not index_path.exists():
         return ExperienceIndex(last_updated=datetime.now())
-    with open(index_path) as f:
+    with open(index_path, encoding="utf-8") as f:
         raw = yaml.safe_load(f) or {}
     return ExperienceIndex(**raw)
 
@@ -119,7 +119,7 @@ def save_experience_index(index: ExperienceIndex, config: MetaLearningConfig) ->
     pool_dir.mkdir(parents=True, exist_ok=True)
     index_path = pool_dir / "index.yaml"
     data = index.model_dump(mode="json")
-    with open(index_path, "w") as f:
+    with open(index_path, "w", encoding="utf-8") as f:
         yaml.dump(data, f, default_flow_style=False, allow_unicode=True)
     return index_path
 
@@ -128,7 +128,7 @@ def load_error_taxonomy(config: MetaLearningConfig) -> ErrorTaxonomy:
     tax_path = Path(config.error_taxonomy_full_path)
     if not tax_path.exists():
         return ErrorTaxonomy()
-    with open(tax_path) as f:
+    with open(tax_path, encoding="utf-8") as f:
         raw = yaml.safe_load(f) or {}
     if "taxonomy" not in raw:
         return ErrorTaxonomy()
@@ -151,7 +151,7 @@ def save_error_taxonomy(taxonomy: ErrorTaxonomy, config: MetaLearningConfig) -> 
             data["taxonomy"][domain][subdomain] = [
                 e.model_dump(mode="json") for e in entries
             ]
-    with open(tax_path, "w") as f:
+    with open(tax_path, "w", encoding="utf-8") as f:
         yaml.dump(data, f, default_flow_style=False, allow_unicode=True)
     return tax_path
 
@@ -171,7 +171,7 @@ def read_session_context(
         return f"Session {session_id} not found"
 
     all_lines: list[str] = []
-    with open(session_file) as f:
+    with open(session_file, encoding="utf-8") as f:
         for raw in f:
             try:
                 record = json.loads(raw.strip())
@@ -306,7 +306,7 @@ def enrich_from_session(
     trace_parts: list[str] = []
 
     try:
-        with open(session_file) as f:
+        with open(session_file, encoding="utf-8") as f:
             for raw_line in f:
                 try:
                     record = json.loads(raw_line.strip())
@@ -503,7 +503,7 @@ def save_layer3_result(result: Layer3Result, config: MetaLearningConfig) -> Path
     ts = result.timestamp.strftime("%Y%m%d_%H%M%S")
     file_path = workspace / f"l3-result-{ts}.yaml"
     data = result.model_dump(mode="json")
-    with open(file_path, "w") as f:
+    with open(file_path, "w", encoding="utf-8") as f:
         yaml.dump(data, f, default_flow_style=False, allow_unicode=True)
     return file_path
 
@@ -517,6 +517,6 @@ def load_latest_layer3_result(
     files = sorted(workspace.glob("l3-result-*.yaml"), reverse=True)
     if not files:
         return None
-    with open(files[0]) as f:
+    with open(files[0], encoding="utf-8") as f:
         raw = yaml.safe_load(f) or {}
     return Layer3Result(**raw)

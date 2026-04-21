@@ -66,7 +66,7 @@ class Layer3Orchestrator:
         if not state_path.exists():
             return None
         try:
-            with open(state_path) as f:
+            with open(state_path, encoding="utf-8") as f:
                 data = json.load(f)
             return datetime.fromisoformat(data["last_l3_run"])
         except (json.JSONDecodeError, KeyError, ValueError):
@@ -79,11 +79,11 @@ class Layer3Orchestrator:
         existing: dict = {}
         if state_path.exists():
             try:
-                with open(state_path) as f:
+                with open(state_path, encoding="utf-8") as f:
                     existing = json.load(f)
             except (json.JSONDecodeError, ValueError):
                 pass
 
         existing["last_l3_run"] = datetime.now().isoformat()
-        with open(state_path, "w") as f:
+        with open(state_path, "w", encoding="utf-8") as f:
             json.dump(existing, f)

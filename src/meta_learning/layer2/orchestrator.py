@@ -210,7 +210,7 @@ class Layer2Orchestrator:
         if not state_path.exists():
             return {"status": "idle"}
         try:
-            with open(state_path) as f:
+            with open(state_path, encoding="utf-8") as f:
                 return json.load(f)
         except (json.JSONDecodeError, ValueError):
             return {"status": "idle"}
@@ -228,7 +228,7 @@ class Layer2Orchestrator:
     def _write_state(self, data: dict) -> None:
         state_path = self._state_path()
         state_path.parent.mkdir(parents=True, exist_ok=True)
-        with open(state_path, "w") as f:
+        with open(state_path, "w", encoding="utf-8") as f:
             json.dump(data, f, ensure_ascii=False)
 
     def mark_running(self) -> None:
