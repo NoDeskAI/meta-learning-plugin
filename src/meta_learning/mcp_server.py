@@ -10,6 +10,7 @@ from __future__ import annotations
 
 import logging
 import os
+import sys
 from datetime import datetime
 from pathlib import Path
 
@@ -40,6 +41,30 @@ logging.basicConfig(
     datefmt="%Y-%m-%d %H:%M:%S",
 )
 logger = logging.getLogger("meta_learning.mcp")
+
+
+def _configure_windows_stdio() -> None:
+    """Force UTF-8 stdio on Windows for MCP stdio transport.
+
+    Some Windows environments still default to GBK/ANSI for inherited stdio.
+    The MCP client/server exchange is UTF-8 text over stdio, so we reconfigure
+    the process streams early to avoid decode failures such as:
+    `'gbk' codec can't decode byte ...`.
+    """
+    if os.name != "nt":
+        return
+
+    os.environ.setdefault("PYTHONIOENCODING", "utf-8")
+    os.environ.setdefault("PYTHONUTF8", "1")
+
+    for stream_name in ("stdin", "stdout", "stderr"):
+        stream = getattr(sys, stream_name, None)
+        if not hasattr(stream, "reconfigure"):
+            continue
+        try:
+            stream.reconfigure(encoding="utf-8", errors="replace")
+        except Exception:
+            logger.debug("Failed to reconfigure %s to UTF-8", stream_name, exc_info=True)
 
 # ---------------------------------------------------------------------------
 # Configuration
@@ -635,6 +660,7 @@ def risk_assessment(task_description: str) -> str:
 # ---------------------------------------------------------------------------
 
 def main() -> None:
+    _configure_windows_stdio()
     mcp.run()
 
 
