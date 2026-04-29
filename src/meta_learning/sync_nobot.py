@@ -147,6 +147,7 @@ def _render_skill_md_from_selected(selected: list[TaxonomyEntry]) -> str:
     lines.append("- **SESSION START**: Call `layer2_status` once at the beginning of each session. If status is \"running\", wait briefly and re-check before proceeding — SKILL.md may be stale.")
     lines.append("- **MUST**: When the user corrects, disagrees with, or redirects your approach, IMMEDIATELY call `capture_signal` with `user_corrections` set to the user's exact feedback. Just saying \"understood\" is NOT enough — you must also call the tool. Learning consolidation runs automatically in the background.")
     lines.append("- Before risky or repetitive actions, call `quick_think` to get detailed guidance.")
+    lines.append("- Treat the meta-learning data directory as MCP-owned state. You may inspect files for diagnosis, but do not create, delete, or hand-edit `meta-learning-data` YAML/JSON to record or repair learning; use the meta-learning MCP tools instead.")
     lines.append("")
     lines.append("Example: User says \"不对，应该用 X\" → call capture_signal(user_corrections=[\"不对，应该用 X\"]) → reply to user.")
     return "\n".join(lines) + "\n"
@@ -256,6 +257,7 @@ def render_agents_md_section() -> str:
    - 首次使用某个工具
    - 步骤数明显偏多
 5. `capture_signal` 后 Layer 2 整合流水线会在后台自动运行，**无需**手动调用 `run_layer2`。
+6. `meta-learning-data` 是 Meta-Learning MCP 的内部状态。可以读取这些文件用于诊断，但**不要**通过文件工具创建、删除或手写修改其中的 YAML/JSON 来记录、修复或回滚学习结果；学习数据只能通过 Meta-Learning MCP 工具维护。
 
 示例：用户说"不对，应该用 X" → 调用 `capture_signal(user_corrections=["不对，应该用 X"])` → 回复用户。
 {AGENTS_MD_END}
