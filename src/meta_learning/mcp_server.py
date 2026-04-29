@@ -8,9 +8,11 @@ Run:  python -m meta_learning.mcp_server
 
 from __future__ import annotations
 
+import asyncio
 import logging
 import os
 import sys
+import threading
 from datetime import datetime
 from pathlib import Path
 
@@ -27,6 +29,7 @@ from meta_learning.shared.io import (
     load_config,
     load_error_taxonomy,
     penalize_taxonomy_confidence,
+    save_error_taxonomy,
 )
 from meta_learning.shared.models import (
     ErrorTaxonomy,
@@ -107,6 +110,8 @@ def _get_config() -> MetaLearningConfig:
 
 _qt_index: QuickThinkIndex | None = None
 _taxonomy_mtime: float = 0.0
+_layer2_task: asyncio.Task | None = None
+_layer2_thread: threading.Thread | None = None
 
 
 def _make_embedding_fn(config: MetaLearningConfig):
@@ -157,6 +162,95 @@ def _create_llm(config: MetaLearningConfig):
     from meta_learning.shared.llm import StubLLM
     logger.warning("Using StubLLM — set llm.provider='openai' for real LLM calls")
     return StubLLM()
+
+
+async def _run_layer2_background(config: MetaLearningConfig) -> None:
+    from meta_learning.layer2.orchestrator import Layer2Orchestrator
+
+    bg_orchestrator = Layer2Orchestrator(config, _create_llm(config))
+    bg_orchestrator.mark_running()
+    try:
+        bootstrap_multimodal_embedding(config)
+        result = await bg_orchestrator.run_pipeline()
+        bg_orchestrator.mark_completed(result)
+        logger.info(
+            "Background Layer 2 complete: materialized=%d, clusters=%d, "
+            "new_taxonomy=%d, skill_updates=%d",
+            result.materialized_count,
+            result.total_clusters,
+            result.new_taxonomy_entries,
+            result.skill_updates,
+        )
+    except Exception as exc:
+        bg_orchestrator.mark_failed(str(exc))
+        logger.exception("Background Layer 2 pipeline failed")
+
+
+def _schedule_layer2_recovery(config: MetaLearningConfig) -> tuple[bool, int, str]:
+    """Resume pending Layer 2 work in this MCP process when possible.
+
+    Background tasks are process-local. If the MCP server or gateway restarts
+    after signals are captured, the old asyncio task disappears while the
+    signal files remain pending. The next status check should therefore recover
+    the backlog instead of leaving it stuck forever.
+    """
+    global _layer2_task
+
+    pending = list_pending_signals(config)
+    if not pending:
+        return False, 0, "no pending signals"
+
+    if _layer2_task is not None and not _layer2_task.done():
+        return False, len(pending), "already running in this process"
+
+    if _layer2_thread is not None and _layer2_thread.is_alive():
+        return False, len(pending), "already running in startup thread"
+
+    from meta_learning.layer2.orchestrator import Layer2Orchestrator
+
+    orchestrator = Layer2Orchestrator(config, _create_llm(config))
+    if not orchestrator.should_trigger():
+        return False, len(pending), "trigger conditions not met"
+
+    _layer2_task = asyncio.create_task(_run_layer2_background(config))
+    return True, len(pending), "scheduled"
+
+
+def _start_layer2_recovery_thread_if_needed() -> None:
+    """Start backlog recovery when the MCP server process starts.
+
+    This covers gateway/MCP restarts where pending signal files survive but the
+    previous in-process asyncio background task is gone.
+    """
+    global _layer2_thread
+
+    config = _get_config()
+    pending = list_pending_signals(config)
+    if not pending:
+        return
+
+    if _layer2_thread is not None and _layer2_thread.is_alive():
+        return
+
+    from meta_learning.layer2.orchestrator import Layer2Orchestrator
+
+    orchestrator = Layer2Orchestrator(config, _create_llm(config))
+    if not orchestrator.should_trigger():
+        return
+
+    def _runner() -> None:
+        asyncio.run(_run_layer2_background(config))
+
+    _layer2_thread = threading.Thread(
+        target=_runner,
+        name="meta-learning-layer2-recovery",
+        daemon=True,
+    )
+    _layer2_thread.start()
+    logger.info(
+        "Started Layer 2 recovery thread for %d pending signal(s)",
+        len(pending),
+    )
 
 
 # ---------------------------------------------------------------------------
@@ -329,36 +423,16 @@ async def capture_signal(
         f"file={config.signal_buffer_path}/{signal.signal_id}.yaml"
     )
 
-    from meta_learning.layer2.orchestrator import Layer2Orchestrator
-
-    orchestrator = Layer2Orchestrator(config, _create_llm(config))
     pending = list_pending_signals(config)
-    if orchestrator.should_trigger():
-        import asyncio
-
-        async def _run_layer2_background() -> None:
-            bg_orchestrator = Layer2Orchestrator(config, _create_llm(config))
-            bg_orchestrator.mark_running()
-            try:
-                bootstrap_multimodal_embedding(config)
-                r = await bg_orchestrator.run_pipeline()
-                bg_orchestrator.mark_completed(r)
-                logger.info(
-                    "Background Layer 2 complete: materialized=%d, clusters=%d, "
-                    "new_taxonomy=%d, skill_updates=%d",
-                    r.materialized_count, r.total_clusters,
-                    r.new_taxonomy_entries, r.skill_updates,
-                )
-            except Exception as exc:
-                bg_orchestrator.mark_failed(str(exc))
-                logger.exception("Background Layer 2 pipeline failed")
-
-        asyncio.create_task(_run_layer2_background())
+    scheduled, _, reason = _schedule_layer2_recovery(config)
+    if scheduled:
         result += (
             f"\n\nLayer 2 triggered in background "
             f"({len(pending)} pending signal(s)). "
             f"Learning takes ~1-2 minutes. Call `layer2_status` to check progress."
         )
+    elif pending and reason == "already running in this process":
+        result += "\n\nLayer 2 is already running in the background."
 
     return result
 
@@ -409,7 +483,7 @@ async def run_layer2(force: bool = False) -> str:
 
 
 @mcp.tool()
-def layer2_status() -> str:
+async def layer2_status() -> str:
     """Check the current Layer 2 pipeline status.
 
     Returns whether the pipeline is idle, running, completed, or failed,
@@ -420,8 +494,16 @@ def layer2_status() -> str:
 
     from meta_learning.layer2.orchestrator import Layer2Orchestrator
 
+    scheduled, pending_count, reason = _schedule_layer2_recovery(config)
     state = Layer2Orchestrator.load_state(config)
     status = state.get("status", "idle")
+
+    if scheduled:
+        return (
+            f"Layer 2: RECOVERING ({pending_count} pending signal(s)). "
+            "A background consolidation task was scheduled after restart. "
+            "SKILL.md has NOT been updated yet — check again later."
+        )
 
     if status == "idle":
         return "Layer 2: idle (no recent activity)"
@@ -441,12 +523,18 @@ def layer2_status() -> str:
     if status == "completed":
         completed_at = state.get("completed_at", "unknown")
         res = state.get("result", {})
+        pending_note = (
+            f" Pending signals remain: {pending_count} ({reason})."
+            if pending_count
+            else ""
+        )
         return (
             f"Layer 2: completed at {completed_at}. "
             f"Materialized {res.get('materialized_count', 0)} experiences, "
             f"created {res.get('new_taxonomy_entries', 0)} taxonomy entries, "
             f"{res.get('skill_updates', 0)} skill updates. "
             f"SKILL.md is up to date."
+            f"{pending_note}"
         )
 
     if status == "failed":
@@ -596,6 +684,35 @@ def contradict_taxonomy_entry(entry_id: str) -> str:
     )
 
 
+@mcp.tool()
+def delete_taxonomy_entry(entry_id: str, sync_to_nobot: bool = True) -> str:
+    """Delete a bad taxonomy entry by ID.
+
+    Use this for polluted or invalid learned rules, such as placeholder/test
+    signals accidentally materialized into the taxonomy.
+
+    Args:
+        entry_id: The taxonomy entry ID to remove.
+        sync_to_nobot: Whether to sync SKILL.md/rules files after deletion.
+    """
+    global _qt_index, _taxonomy_mtime
+
+    config = _get_config()
+    taxonomy = load_error_taxonomy(config)
+    removed = taxonomy.remove_entry(entry_id)
+    if not removed:
+        return f"Taxonomy entry '{entry_id}' not found."
+
+    save_error_taxonomy(taxonomy, config)
+    _qt_index = None
+    _taxonomy_mtime = 0.0
+
+    sync_msg = ""
+    if sync_to_nobot:
+        sync_msg = f"\n{sync_taxonomy_to_nobot()}"
+    return f"Deleted taxonomy entry '{entry_id}'.{sync_msg}"
+
+
 # ---------------------------------------------------------------------------
 # Resources
 # ---------------------------------------------------------------------------
@@ -661,6 +778,7 @@ def risk_assessment(task_description: str) -> str:
 
 def main() -> None:
     _configure_windows_stdio()
+    _start_layer2_recovery_thread_if_needed()
     mcp.run()
 
 

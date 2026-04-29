@@ -176,3 +176,35 @@ class TestExtractTaxonomySingleExperience:
             await openai_llm.extract_taxonomy(exps)
 
         assert "SINGLE EXPERIENCE" not in captured["system"]
+
+    @pytest.mark.asyncio
+    async def test_extract_taxonomy_accepts_list_response(self, openai_llm):
+        from meta_learning.shared.models import Experience, TaskType
+
+        exp = Experience(
+            id="exp-001",
+            task_type=TaskType.CONFIGURATION,
+            created_at=datetime.now(),
+            source_signal="sig-001",
+            confidence=0.6,
+            scene="Need clarification",
+            failure_signature=None,
+            root_cause="Ambiguous input",
+            resolution="Ask the user",
+            meta_insight="Use ask_user when unclear",
+        )
+
+        async def mock_chat_json(_system, _user):
+            return [{
+                "name": "Ask User",
+                "trigger": "unclear input",
+                "fix_sop": "ask",
+                "prevention": "Use ask_user",
+                "keywords": ["ask_user"],
+            }]
+
+        with patch.object(openai_llm, "_chat_json", side_effect=mock_chat_json):
+            result = await openai_llm.extract_taxonomy([exp])
+
+        assert result.name == "Ask User"
+        assert result.keywords == ["ask_user"]

@@ -20,7 +20,6 @@ from meta_learning.shared.models import (
     CapabilityAnalysis,
     ConsolidateJudgment,
     CrossTaskAnalysis,
-    TriggerReason,
     Experience,
     MaterializeResult,
     MemoryAction,
@@ -33,6 +32,7 @@ from meta_learning.shared.models import (
     TaskType,
     TaxonomyEntry,
     TaxonomyExtraction,
+    TriggerReason,
 )
 
 logger = logging.getLogger(__name__)
@@ -320,6 +320,10 @@ it MUST appear in prevention.
 
         try:
             data = await self._chat_json(system, user)
+            if isinstance(data, list):
+                data = next((item for item in data if isinstance(item, dict)), {})
+            if not isinstance(data, dict):
+                data = {}
             return TaxonomyExtraction(
                 name=data.get("name", "Unknown pattern"),
                 trigger=data.get("trigger", "Unknown"),

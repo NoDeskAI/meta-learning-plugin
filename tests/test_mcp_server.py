@@ -7,7 +7,7 @@ using the same tmp_config fixture as the rest of the test suite.
 from __future__ import annotations
 
 import os
-from datetime import date
+from datetime import date, datetime
 from pathlib import Path
 from unittest.mock import patch
 
@@ -16,7 +16,9 @@ import yaml
 
 from meta_learning.shared.models import (
     ErrorTaxonomy,
+    Signal,
     TaxonomyEntry,
+    TriggerReason,
 )
 
 
@@ -28,10 +30,18 @@ def _reset_mcp_globals():
     mod._config = None
     mod._qt_index = None
     mod._taxonomy_mtime = 0.0
+    if mod._layer2_task is not None and not mod._layer2_task.done():
+        mod._layer2_task.cancel()
+    mod._layer2_task = None
+    mod._layer2_thread = None
     yield
+    if mod._layer2_task is not None and not mod._layer2_task.done():
+        mod._layer2_task.cancel()
     mod._config = None
     mod._qt_index = None
     mod._taxonomy_mtime = 0.0
+    mod._layer2_task = None
+    mod._layer2_thread = None
 
 
 @pytest.fixture
@@ -238,6 +248,44 @@ class TestStatus:
 
 
 # -----------------------------------------------------------------------
+# layer2_status
+# -----------------------------------------------------------------------
+
+
+class TestLayer2Status:
+    @pytest.mark.usefixtures("_env")
+    @pytest.mark.asyncio
+    async def test_recovers_pending_backlog_after_restart(self, workspace: Path):
+        from meta_learning.mcp_server import layer2_status
+        from meta_learning.shared.io import write_signal
+        from meta_learning.shared.models import MetaLearningConfig
+
+        config = MetaLearningConfig(workspace_root=str(workspace))
+        write_signal(
+            Signal(
+                signal_id="sig-20260429-001",
+                timestamp=datetime(2026, 4, 29, 12, 0),
+                session_id="unknown",
+                trigger_reason=TriggerReason.USER_CORRECTION,
+                keywords=["ask_user"],
+                task_summary="remember clarification rule",
+                user_feedback="ask when unclear",
+                step_count=1,
+            ),
+            config,
+        )
+
+        async def _no_op(_config):
+            return None
+
+        with patch("meta_learning.mcp_server._run_layer2_background", new=_no_op):
+            result = await layer2_status()
+
+        assert "RECOVERING" in result
+        assert "1 pending signal" in result
+
+
+# -----------------------------------------------------------------------
 # run_layer2
 # -----------------------------------------------------------------------
 
@@ -304,6 +352,32 @@ class TestSyncTaxonomyToNobot:
         text = skill.read_text(encoding="utf-8")
         assert "Meta-Learning Rules" in text
         assert "quick_think" in text
+
+
+# -----------------------------------------------------------------------
+# taxonomy maintenance
+# -----------------------------------------------------------------------
+
+
+class TestTaxonomyMaintenance:
+    @pytest.mark.usefixtures("_env")
+    def test_delete_taxonomy_entry(self, workspace: Path):
+        _write_taxonomy(workspace, _sample_taxonomy())
+
+        from meta_learning.mcp_server import delete_taxonomy_entry, get_taxonomy
+
+        msg = delete_taxonomy_entry("tax-cod-001", sync_to_nobot=False)
+
+        assert "Deleted taxonomy entry" in msg
+        assert "tax-cod-001" not in get_taxonomy()
+
+    @pytest.mark.usefixtures("_env")
+    def test_delete_taxonomy_entry_missing(self):
+        from meta_learning.mcp_server import delete_taxonomy_entry
+
+        msg = delete_taxonomy_entry("tax-missing", sync_to_nobot=False)
+
+        assert "not found" in msg
 
 
 # -----------------------------------------------------------------------

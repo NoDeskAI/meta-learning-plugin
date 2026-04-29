@@ -267,6 +267,7 @@ _META_LEARNING_TOOLS = frozenset({
     "mcp_meta-learning_sync_taxonomy_to_nobot",
     "mcp_meta-learning_confirm_taxonomy_entry",
     "mcp_meta-learning_contradict_taxonomy_entry",
+    "mcp_meta-learning_delete_taxonomy_entry",
     "capture_signal",
     "quick_think",
     "run_layer2",
@@ -276,6 +277,7 @@ _META_LEARNING_TOOLS = frozenset({
     "sync_taxonomy_to_nobot",
     "confirm_taxonomy_entry",
     "contradict_taxonomy_entry",
+    "delete_taxonomy_entry",
 })
 
 
