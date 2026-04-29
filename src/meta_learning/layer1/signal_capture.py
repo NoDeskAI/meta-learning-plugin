@@ -48,7 +48,7 @@ class SignalCapture:
         error_snapshot: str | None = None
         if context.errors_encountered:
             error_snapshot = "\n---\n".join(context.errors_encountered)[:2000]
-        elif context.extra.get("action_trace"):
+        elif trigger != TriggerReason.USER_CORRECTION and context.extra.get("action_trace"):
             error_snapshot = str(context.extra["action_trace"])[:2000]
 
         resolution_snapshot: str | None = None

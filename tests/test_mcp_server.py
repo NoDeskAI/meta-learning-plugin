@@ -130,6 +130,13 @@ class TestQuickThink:
         result = quick_think("push changes", tools_used=["git push --force"])
         assert "irreversible" in result.lower()
 
+    @pytest.mark.usefixtures("_env")
+    def test_tools_used_accepts_string(self):
+        from meta_learning.mcp_server import quick_think
+
+        result = quick_think("push changes", tools_used="git push --force")
+        assert "irreversible" in result.lower()
+
 
 # -----------------------------------------------------------------------
 # capture_signal
@@ -171,6 +178,61 @@ class TestCaptureSignal:
         )
         assert "Signal captured" in result
         assert "user_correction" in result
+
+    @pytest.mark.usefixtures("_env")
+    async def test_captures_json_string_user_correction(self, workspace: Path):
+        from meta_learning.mcp_server import capture_signal
+
+        result = await capture_signal(
+            task_description="Summarize meta-learning workflow",
+            user_corrections='["后台学习应该通过 spawn 执行"]',
+            tools_used='["mcp_meta-learning_capture_signal", "spawn"]',
+        )
+
+        assert "Signal captured" in result
+        sig_files = sorted((workspace / "signal_buffer").glob("sig-*.yaml"))
+        signal_data = yaml.safe_load(sig_files[0].read_text(encoding="utf-8"))
+        assert signal_data["user_feedback"] == "后台学习应该通过 spawn 执行"
+        assert signal_data["keywords"][:2] == [
+            "mcp_meta-learning_capture_signal",
+            "spawn",
+        ]
+
+    @pytest.mark.usefixtures("_env")
+    async def test_captures_scalar_user_correction(self, workspace: Path):
+        from meta_learning.mcp_server import capture_signal
+
+        result = await capture_signal(
+            task_description="Summarize meta-learning workflow",
+            user_corrections="必须使用真实数组，但字符串也要兼容",
+        )
+
+        assert "Signal captured" in result
+        sig_files = sorted((workspace / "signal_buffer").glob("sig-*.yaml"))
+        signal_data = yaml.safe_load(sig_files[0].read_text(encoding="utf-8"))
+        assert signal_data["user_feedback"] == "必须使用真实数组，但字符串也要兼容"
+
+    @pytest.mark.usefixtures("_env")
+    async def test_infers_recent_session_when_not_provided(self, workspace: Path):
+        from meta_learning.mcp_server import capture_signal
+
+        sessions_dir = workspace / "sessions"
+        sessions_dir.mkdir()
+        session_file = sessions_dir / "agent_main_desk-recent.jsonl"
+        session_file.write_text(
+            '{"role":"user","content":"纠正一下"}\n',
+            encoding="utf-8",
+        )
+
+        result = await capture_signal(
+            task_description="Implement feature",
+            user_corrections=["不对，应该后台学习"],
+        )
+
+        assert "Signal captured" in result
+        sig_files = sorted((workspace / "signal_buffer").glob("sig-*.yaml"))
+        signal_data = yaml.safe_load(sig_files[0].read_text(encoding="utf-8"))
+        assert signal_data["session_id"] == "agent:main:desk-recent"
 
     @pytest.mark.usefixtures("_env")
     async def test_captures_efficiency_anomaly(self, workspace: Path):

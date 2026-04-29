@@ -9,6 +9,7 @@ Run:  python -m meta_learning.mcp_server
 from __future__ import annotations
 
 import asyncio
+import json
 import logging
 import os
 import sys
@@ -144,6 +145,60 @@ def _create_llm(config: MetaLearningConfig):
     from meta_learning.shared.llm import StubLLM
     logger.warning("Using StubLLM — set llm.provider='openai' for real LLM calls")
     return StubLLM()
+
+
+def _session_id_from_file(path: Path) -> str:
+    stem = path.stem
+    if stem.startswith("agent_"):
+        parts = stem.split("_", 2)
+        if len(parts) == 3:
+            return f"agent:{parts[1]}:{parts[2]}"
+    return stem.replace("_", ":")
+
+
+def _infer_recent_session_id(config: MetaLearningConfig) -> str | None:
+    session_dirs = [
+        Path(config.sessions_full_path).expanduser(),
+        Path(config.workspace_root).expanduser() / "sessions",
+    ]
+    candidates: list[Path] = []
+    for session_dir in session_dirs:
+        if not session_dir.exists():
+            continue
+        candidates.extend(
+            path for path in session_dir.glob("*.jsonl")
+            if path.is_file() and "capture-tmp-" not in path.name
+        )
+    if not candidates:
+        return None
+    latest = max(candidates, key=lambda path: path.stat().st_mtime)
+    return _session_id_from_file(latest)
+
+
+def _coerce_str_list(value: list[str] | str | None) -> list[str]:
+    """Normalize MCP list arguments.
+
+    LLMs sometimes send a JSON-encoded array string for list parameters. Accept
+    it here so learning capture is not lost to a recoverable argument-shape
+    error.
+    """
+    if value is None:
+        return []
+    if isinstance(value, list):
+        return [str(item).strip() for item in value if str(item).strip()]
+    if isinstance(value, str):
+        stripped = value.strip()
+        if not stripped:
+            return []
+        try:
+            parsed = json.loads(stripped)
+        except json.JSONDecodeError:
+            parsed = None
+        if isinstance(parsed, list):
+            return [str(item).strip() for item in parsed if str(item).strip()]
+        return [stripped]
+    text = str(value).strip()
+    return [text] if text else []
 
 
 async def _run_layer2_background(config: MetaLearningConfig) -> None:
@@ -293,7 +348,7 @@ mcp = FastMCP(
 @mcp.tool()
 def quick_think(
     user_message: str,
-    tools_used: list[str] | None = None,
+    tools_used: list[str] | str | None = None,
 ) -> str:
     """Assess risk of a task before execution.
 
@@ -306,14 +361,15 @@ def quick_think(
 
     Args:
         user_message: The user's task description / latest message.
-        tools_used: Names of tools you plan to use (optional).
+        tools_used: Names of tools you plan to use (optional). Prefer a real
+            array of strings, e.g. ["read_file"]; a single string is accepted.
     """
     config = _get_config()
     index = _get_quick_think_index()
 
     context = TaskContext(
         task_description=user_message,
-        tools_used=tools_used or [],
+        tools_used=_coerce_str_list(tools_used),
     )
     result = index.evaluate(context)
 
@@ -328,13 +384,13 @@ def quick_think(
 async def capture_signal(
     task_description: str,
     session_id: str = "unknown",
-    errors_encountered: list[str] | None = None,
+    errors_encountered: list[str] | str | None = None,
     errors_fixed: bool = False,
-    user_corrections: list[str] | None = None,
-    tools_used: list[str] | None = None,
-    new_tools: list[str] | None = None,
+    user_corrections: list[str] | str | None = None,
+    tools_used: list[str] | str | None = None,
+    new_tools: list[str] | str | None = None,
     resolution_snapshot: str | None = None,
-    image_snapshots: list[str] | None = None,
+    image_snapshots: list[str] | str | None = None,
     step_count: int = 0,
 ) -> str:
     """Record a learning signal after completing a task.
@@ -360,21 +416,33 @@ async def capture_signal(
         task_description: Brief summary of the task.
         session_id: Current session identifier.
         errors_encountered: Error messages or tracebacks seen during the task.
+            Prefer a real array of strings, not a JSON string.
         errors_fixed: Whether the errors were successfully resolved.
-        user_corrections: User feedback that corrected your approach.
-        tools_used: All tools invoked during the task.
-        new_tools: Tools used for the first time.
+        user_corrections: User feedback that corrected your approach. Must be
+            a real array of strings when possible, e.g. ["use spawn for
+            background learning"]; do not pass a JSON-encoded array string.
+        tools_used: All tools invoked during the task. Prefer a real array.
+        new_tools: Tools used for the first time. Prefer a real array.
         resolution_snapshot: Short summary of how the issue was resolved.
         image_snapshots: Paths to screenshots captured during this task.
+            Prefer a real array.
         step_count: Total number of tool calls / steps taken.
     """
     config = _get_config()
     capture = SignalCapture(config)
+    errors_encountered_list = _coerce_str_list(errors_encountered)
+    user_corrections_list = _coerce_str_list(user_corrections)
+    tools_used_list = _coerce_str_list(tools_used)
+    new_tools_list = _coerce_str_list(new_tools)
+    image_snapshots_list = _coerce_str_list(image_snapshots)
+
+    if not session_id or session_id == "unknown":
+        session_id = _infer_recent_session_id(config) or "unknown"
 
     if session_id and session_id != "unknown":
         enrichment = enrich_from_session(session_id, config)
-        if not tools_used and enrichment.tools_used:
-            tools_used = enrichment.tools_used
+        if not tools_used_list and enrichment.tools_used:
+            tools_used_list = enrichment.tools_used
         if step_count == 0 and enrichment.step_count > 0:
             step_count = enrichment.step_count
     else:
@@ -383,15 +451,15 @@ async def capture_signal(
     context = TaskContext(
         task_description=task_description,
         session_id=session_id,
-        errors_encountered=errors_encountered or [],
+        errors_encountered=errors_encountered_list,
         errors_fixed=errors_fixed,
-        user_corrections=user_corrections or [],
-        tools_used=tools_used or [],
-        new_tools=new_tools or [],
+        user_corrections=user_corrections_list,
+        tools_used=tools_used_list,
+        new_tools=new_tools_list,
         step_count=step_count,
         extra={
             "resolution": resolution_snapshot,
-            "image_snapshots": image_snapshots or [],
+            "image_snapshots": image_snapshots_list,
             "action_trace": enrichment.action_trace if enrichment else None,
         },
     )

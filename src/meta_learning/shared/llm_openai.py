@@ -16,7 +16,7 @@ from typing import Any
 
 import httpx
 
-from meta_learning.shared.llm import LLMInterface
+from meta_learning.shared.llm import LLMInterface, _fallback_extract_taxonomy
 from meta_learning.shared.models import (
     CapabilityAnalysis,
     ConsolidateJudgment,
@@ -148,6 +148,13 @@ def _load_current_deskclaw_llm_config() -> dict[str, Any]:
         result["temperature"] = temperature
     if max_tokens is not None:
         result["max_tokens"] = max_tokens
+    app_version = (
+        settings.get("env.version")
+        or settings.get("app.lastVersion")
+        or _as_dict(settings.get("app.lifecycle")).get("currentVersion")
+    )
+    if app_version:
+        result["app_version"] = str(app_version)
     return result
 
 
@@ -180,6 +187,12 @@ class OpenAILLM(LLMInterface):
             or current.get("max_tokens")
             or config.llm.max_tokens
         )
+        self._deskclaw_app_version = (
+            os.environ.get("DESKCLAW_APP_VERSION")
+            or os.environ.get("META_LEARNING_DESKCLAW_APP_VERSION")
+            or current.get("app_version")
+            or ""
+        ).strip()
 
         if not self._base_url:
             raise RuntimeError(
@@ -206,6 +219,8 @@ class OpenAILLM(LLMInterface):
             headers = {"Content-Type": "application/json"}
             if self._api_key:
                 headers["Authorization"] = f"Bearer {self._api_key}"
+            if self._deskclaw_app_version:
+                headers["X-DeskClaw-Version"] = self._deskclaw_app_version
             resp = await client.post(
                 f"{self._base_url}/chat/completions",
                 headers=headers,
@@ -450,7 +465,11 @@ IMPORTANT:
         system += f"\n\n{language_instruction}"
 
         exp_summaries = "\n\n".join(
-            f"[{e.id}] {e.scene}\n  Failure: {e.failure_signature}\n  Root cause: {e.root_cause}\n  Resolution: {e.resolution}"
+            f"[{e.id}] {e.scene}\n"
+            f"  Failure: {e.failure_signature or 'N/A'}\n"
+            f"  Root cause: {e.root_cause}\n"
+            f"  Resolution: {e.resolution}\n"
+            f"  Meta insight: {e.meta_insight}"
             for e in experiences[:10]
         )
         user = f"Experiences ({len(experiences)} total):\n{exp_summaries}"
@@ -463,6 +482,8 @@ There is only ONE experience. Preserve its resolution and meta_insight as closel
 as possible in fix_sop and prevention. Do NOT over-generalize a single data point.
 If the resolution contains a specific action verb (e.g. "backup", "create under X"),
 it MUST appear in prevention.
+If failure_signature is N/A or unknown, ignore it. The meta_insight is the learned
+rule and should usually become prevention.
 """
 
         try:
@@ -480,14 +501,7 @@ it MUST appear in prevention.
             )
         except Exception as e:
             logger.warning("extract_taxonomy LLM call failed: %s", e)
-            sigs = [e.failure_signature for e in experiences if e.failure_signature]
-            return TaxonomyExtraction(
-                name=sigs[0] if sigs else "Unknown",
-                trigger=sigs[0] if sigs else "Unknown",
-                fix_sop="",
-                prevention="",
-                keywords=[],
-            )
+            return _fallback_extract_taxonomy(experiences)
 
     async def evaluate_skill_update(
         self,

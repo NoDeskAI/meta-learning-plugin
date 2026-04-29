@@ -81,6 +81,7 @@ class TestDeskClawSettingsConfig:
                         "temperature": 0.2,
                         "maxTokens": 1234,
                     },
+                    "env.version": "2.2.7",
                 }
             ),
             encoding="utf-8",
@@ -102,6 +103,7 @@ class TestDeskClawSettingsConfig:
         assert llm._model == "gateway-model"
         assert llm._temperature == 0.2
         assert llm._max_tokens == 1234
+        assert llm._deskclaw_app_version == "2.2.7"
 
     def test_custom_config_selected_in_custom_mode(
         self,
@@ -171,6 +173,63 @@ class TestDeskClawSettingsConfig:
         assert llm._model == "env-model"
         assert llm._temperature == 0.9
         assert llm._max_tokens == 99
+
+    @pytest.mark.asyncio
+    async def test_chat_sends_deskclaw_version_header(
+        self,
+        tmp_config: MetaLearningConfig,
+        tmp_path,
+        monkeypatch: pytest.MonkeyPatch,
+    ):
+        settings_path = tmp_path / "deskclaw-settings.json"
+        settings_path.write_text(
+            json.dumps(
+                {
+                    "settings.configMode": "default",
+                    "settings.gatewayConfig": {
+                        "apiUrl": "https://gateway.example.test/v1",
+                        "apiKey": "gateway-key",
+                        "model": "gateway-model",
+                    },
+                    "env.version": "2.2.7",
+                }
+            ),
+            encoding="utf-8",
+        )
+        monkeypatch.setenv("DESKCLAW_SETTINGS_PATH", str(settings_path))
+        monkeypatch.delenv("DESKCLAW_APP_VERSION", raising=False)
+        captured = {}
+
+        class _FakeResponse:
+            def raise_for_status(self):
+                return None
+
+            def json(self):
+                return {"choices": [{"message": {"content": "ok"}}]}
+
+        class _FakeClient:
+            def __init__(self, *args, **kwargs):
+                pass
+
+            async def __aenter__(self):
+                return self
+
+            async def __aexit__(self, *args):
+                return None
+
+            async def post(self, url, *, headers, json):
+                captured["url"] = url
+                captured["headers"] = headers
+                captured["json"] = json
+                return _FakeResponse()
+
+        llm = OpenAILLM(tmp_config)
+        with patch("meta_learning.shared.llm_openai.httpx.AsyncClient", _FakeClient):
+            result = await llm._chat("system", "user")
+
+        assert result == "ok"
+        assert captured["headers"]["X-DeskClaw-Version"] == "2.2.7"
+        assert captured["headers"]["Authorization"] == "Bearer gateway-key"
 
 
 class TestMaterializePromptDifferentiation:
@@ -271,6 +330,7 @@ class TestMaterializePromptDifferentiation:
 
         async def mock_chat_json(system, user):
             captured["system"] = system
+            captured["user"] = user
             return {
                 "scene": "t", "root_cause": "c", "resolution": "f",
                 "meta_insight": "i", "task_type": "coding",
@@ -298,6 +358,7 @@ class TestExtractTaxonomySingleExperience:
 
         async def mock_chat_json(system, user):
             captured["system"] = system
+            captured["user"] = user
             return {
                 "name": "Backup", "trigger": "editing config",
                 "fix_sop": "1. backup", "prevention": "Always backup",
@@ -309,6 +370,34 @@ class TestExtractTaxonomySingleExperience:
 
         assert "SINGLE EXPERIENCE" in captured["system"]
         assert "PRESERVE SPECIFICS" in captured["system"]
+        assert "Meta insight: Backup config files" in captured["user"]
+
+    @pytest.mark.asyncio
+    async def test_extract_taxonomy_fallback_uses_meta_insight(self, openai_llm):
+        from meta_learning.shared.models import Experience, TaskType
+
+        exp = Experience(
+            id="exp-001",
+            task_type=TaskType.UNCLASSIFIED,
+            created_at=datetime.now(),
+            source_signal="sig-001",
+            confidence=0.6,
+            scene="用户要求后台学习",
+            failure_signature=None,
+            root_cause="用户纠正了学习流程",
+            resolution="后台学习应该通过 spawn 执行",
+            meta_insight="meta-learning 后台学习应该通过 spawn 执行，避免阻塞主会话",
+        )
+
+        async def mock_chat_json(_system, _user):
+            raise RuntimeError("upstream unavailable")
+
+        with patch.object(openai_llm, "_chat_json", side_effect=mock_chat_json):
+            result = await openai_llm.extract_taxonomy([exp])
+
+        assert result.prevention == "meta-learning 后台学习应该通过 spawn 执行，避免阻塞主会话"
+        assert "unknown" not in result.name.lower()
+        assert "Avoid conditions leading to" not in result.prevention
 
     @pytest.mark.asyncio
     async def test_multiple_experiences_no_preserve_specifics(self, openai_llm):

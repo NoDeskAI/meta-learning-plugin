@@ -47,6 +47,20 @@ class TestSignalCaptureTriggering:
         assert signal.trigger_reason == TriggerReason.USER_CORRECTION
         assert signal.user_feedback is not None
 
+    def test_user_correction_does_not_store_action_trace_as_error(self, tmp_config):
+        capture = SignalCapture(tmp_config)
+        ctx = TaskContext(
+            task_description="Learn meta-learning rule",
+            user_corrections=["后台学习应该通过 spawn 执行"],
+            tools_used=["mcp_meta-learning_capture_signal"],
+            extra={"action_trace": "read_file → edit_file → mcp_meta-learning_capture_signal"},
+            step_count=3,
+        )
+        signal = capture.evaluate_and_capture(ctx)
+        assert signal is not None
+        assert signal.trigger_reason == TriggerReason.USER_CORRECTION
+        assert signal.error_snapshot is None
+
     def test_new_tool_trigger(self, tmp_config):
         capture = SignalCapture(tmp_config)
         ctx = TaskContext(

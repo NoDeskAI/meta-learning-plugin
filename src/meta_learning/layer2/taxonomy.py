@@ -57,6 +57,15 @@ def _entry_text_similarity(
 
 
 MERGE_SIMILARITY_THRESHOLD = 0.7
+_LOW_QUALITY_VALUES = {
+    "",
+    "unknown",
+    "unknown trigger",
+    "unknown pattern",
+    "n/a",
+    "none",
+    "null",
+}
 
 
 def _merge_into_existing(
@@ -75,6 +84,20 @@ def _merge_into_existing(
         existing.confidence + 0.05 * len(new_experiences), 1.0
     )
     existing.last_verified = date.today()
+
+
+def _is_low_quality_extraction(extraction: TaxonomyExtraction) -> bool:
+    name = extraction.name.strip().lower()
+    trigger = extraction.trigger.strip().lower()
+    prevention = extraction.prevention.strip().lower()
+    fix_sop = extraction.fix_sop.strip().lower()
+    if name in _LOW_QUALITY_VALUES and trigger in _LOW_QUALITY_VALUES:
+        return True
+    if prevention in _LOW_QUALITY_VALUES and fix_sop in _LOW_QUALITY_VALUES:
+        return True
+    if prevention == "avoid conditions leading to: unknown":
+        return True
+    return False
 
 
 class TaxonomyBuilder:
@@ -137,6 +160,13 @@ class TaxonomyBuilder:
                     continue
 
             extraction = await self._llm.extract_taxonomy(experiences)
+            if _is_low_quality_extraction(extraction):
+                logger.warning(
+                    "Skipping low-quality taxonomy extraction for cluster %s: %s",
+                    cluster.cluster_id,
+                    extraction,
+                )
+                continue
 
             best_match: TaxonomyEntry | None = None
             best_sim = 0.0

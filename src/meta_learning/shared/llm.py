@@ -83,6 +83,75 @@ def _extract_representative_token(signatures: list[str]) -> str:
     return "general"
 
 
+_LOW_VALUE_TEXT = {
+    "",
+    "unknown",
+    "unknown trigger",
+    "unknown pattern",
+    "n/a",
+    "none",
+    "null",
+    "no resolution captured",
+}
+
+
+def _is_useful_text(value: str | None) -> bool:
+    if value is None:
+        return False
+    normalized = value.strip().lower()
+    return normalized not in _LOW_VALUE_TEXT
+
+
+def _contains_cjk(text: str) -> bool:
+    return any("\u4e00" <= ch <= "\u9fff" for ch in text)
+
+
+def _best_experience_rule(exp: Experience) -> str:
+    for value in (exp.meta_insight, exp.resolution, exp.root_cause, exp.scene):
+        if _is_useful_text(value):
+            return value.strip()
+    return "保留用户纠正并在类似场景中执行" if _contains_cjk(exp.scene) else "Apply the learned user correction in similar situations"
+
+
+def _fallback_extract_taxonomy(experiences: list[Experience]) -> TaxonomyExtraction:
+    from meta_learning.shared.models import TaxonomyExtraction
+
+    if not experiences:
+        return TaxonomyExtraction(
+            name="No experiences",
+            trigger="No applicable trigger",
+            fix_sop="",
+            prevention="",
+            keywords=[],
+        )
+
+    rules: list[str] = []
+    for exp in experiences:
+        rule = _best_experience_rule(exp)
+        if rule not in rules:
+            rules.append(rule)
+
+    first = experiences[0]
+    signatures = [e.failure_signature for e in experiences if _is_useful_text(e.failure_signature)]
+    primary_rule = rules[0]
+    chinese = _contains_cjk(" ".join([primary_rule, first.scene, first.meta_insight]))
+    representative = _extract_representative_token(signatures) if signatures else primary_rule[:60].rstrip(" ,.;，。")
+    name = f"{first.task_type.value}: {representative} ({len(experiences)} experiences)"
+
+    trigger = signatures[0] if signatures else first.scene if _is_useful_text(first.scene) else (
+        "遇到类似任务或用户纠正时" if chinese else "When a similar task or user correction appears"
+    )
+    fix_sop = "\n".join(f"{idx}. {rule}" for idx, rule in enumerate(rules[:5], start=1))
+
+    return TaxonomyExtraction(
+        name=name,
+        trigger=trigger,
+        fix_sop=fix_sop,
+        prevention=primary_rule,
+        keywords=_extract_common_keywords(experiences),
+    )
+
+
 class StubLLM(LLMInterface):
     async def materialize_signal(
         self,
@@ -97,14 +166,14 @@ class StubLLM(LLMInterface):
                 task_type = tt
                 break
 
-        snapshot = signal.resolution_snapshot or "unknown"
+        snapshot = signal.resolution_snapshot or signal.user_feedback or "unknown"
         kw_str = ", ".join(signal.keywords)
         return MaterializeResult(
             scene=signal.task_summary,
             failure_signature=signal.error_snapshot,
-            root_cause=f"Root cause derived from: {snapshot}",
-            resolution=signal.resolution_snapshot or "No resolution captured",
-            meta_insight=f"Insight from signal {signal.signal_id}: {kw_str}",
+            root_cause=signal.user_feedback or f"Root cause derived from: {snapshot}",
+            resolution=signal.resolution_snapshot or signal.user_feedback or "No resolution captured",
+            meta_insight=signal.user_feedback or f"Insight from signal {signal.signal_id}: {kw_str}",
             task_type=task_type,
         )
 
@@ -130,23 +199,7 @@ class StubLLM(LLMInterface):
         self,
         experiences: list[Experience],
     ) -> TaxonomyExtraction:
-        from meta_learning.shared.models import TaxonomyExtraction
-
-        signatures = [e.failure_signature for e in experiences if e.failure_signature]
-        resolutions = [e.resolution for e in experiences]
-
-        first_sig = signatures[0] if signatures else "unknown"
-        task_type = experiences[0].task_type.value if experiences else "unknown"
-        representative = _extract_representative_token(signatures)
-        name = f"{task_type}: {representative} ({len(experiences)} experiences)"
-
-        return TaxonomyExtraction(
-            name=name,
-            trigger=first_sig if signatures else "unknown trigger",
-            fix_sop="\n".join(f"- {r}" for r in resolutions[:3]),
-            prevention=f"Avoid conditions leading to: {first_sig}",
-            keywords=_extract_common_keywords(experiences),
-        )
+        return _fallback_extract_taxonomy(experiences)
 
     async def evaluate_skill_update(
         self,

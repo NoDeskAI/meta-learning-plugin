@@ -21,6 +21,8 @@ import pytest
 from meta_learning.layer2.consolidate import Consolidator
 from meta_learning.layer2.materialize import Materializer
 from meta_learning.layer2.skill_evolve import SkillEvolver
+from meta_learning.layer2.taxonomy import TaxonomyBuilder
+from meta_learning.shared.llm import StubLLM
 from meta_learning.shared.io import (
     boost_taxonomy_confidence,
     list_all_experiences,
@@ -32,6 +34,8 @@ from meta_learning.shared.io import (
 from meta_learning.shared.models import (
     ErrorTaxonomy,
     Experience,
+    ExperienceCluster,
+    TaxonomyExtraction,
     SkillUpdateAction,
     TaxonomyEntry,
     TaskType,
@@ -320,6 +324,14 @@ class TestPreventionFallback:
         entry = _tax(prevention="Check types", fix_sop="Fix generics", trigger="On TS error")
         assert _entry_rule_text(entry) == "Check types"
 
+    def test_unknown_prevention_excluded(self):
+        entry = _tax(
+            prevention="Avoid conditions leading to: unknown",
+            fix_sop="",
+            trigger="unknown trigger",
+        )
+        assert _entry_rule_text(entry) == ""
+
     def test_empty_entries_excluded_from_skill_md(self):
         entries = [
             _tax("a", prevention="Avoid X", confidence=0.9,
@@ -343,6 +355,53 @@ class TestPreventionFallback:
         ]
         md = _render_skill_md(entries, max_rules=10)
         assert "Always run lint" in md
+
+
+@pytest.mark.asyncio
+class TestTaxonomyQualityGuards:
+    async def test_stub_llm_uses_meta_insight_not_unknown_signature(self):
+        exp = Experience(
+            id="exp-001",
+            task_type=TaskType.UNCLASSIFIED,
+            created_at=datetime.now(),
+            source_signal="sig-001",
+            scene="用户要求后台学习",
+            failure_signature=None,
+            root_cause="用户纠正了学习流程",
+            resolution="后台学习应该通过 spawn 执行",
+            meta_insight="meta-learning 后台学习应该通过 spawn 执行，避免阻塞主会话",
+        )
+
+        result = await StubLLM().extract_taxonomy([exp])
+
+        assert result.prevention == "meta-learning 后台学习应该通过 spawn 执行，避免阻塞主会话"
+        assert "unknown" not in result.name.lower()
+
+    async def test_builder_skips_low_quality_unknown_extraction(self, tmp_config):
+        class BadLLM(StubLLM):
+            async def extract_taxonomy(self, experiences):
+                return TaxonomyExtraction(
+                    name="Unknown",
+                    trigger="unknown trigger",
+                    fix_sop="",
+                    prevention="Avoid conditions leading to: unknown",
+                    keywords=[],
+                )
+
+        exp = _exp("exp-001")
+        write_experience(exp, tmp_config)
+        cluster = ExperienceCluster(
+            cluster_id="cluster-001",
+            task_type=TaskType.UNCLASSIFIED,
+            failure_signature_pattern="unknown",
+            experience_ids=[exp.id],
+        )
+
+        entries = await TaxonomyBuilder(tmp_config, BadLLM()).build_from_clusters([cluster])
+
+        assert entries == []
+        taxonomy = load_error_taxonomy(tmp_config)
+        assert taxonomy.all_entries() == []
 
 
 # =======================================================================

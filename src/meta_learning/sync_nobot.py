@@ -122,7 +122,17 @@ def _render_skill_md(entries: list[TaxonomyEntry], max_rules: int = 10) -> str:
 
 def _entry_rule_text(entry: TaxonomyEntry) -> str:
     """Best available one-liner for an entry: prevention > fix_sop > trigger."""
-    return entry.prevention or entry.fix_sop or entry.trigger
+    for value in (entry.prevention, entry.fix_sop, entry.trigger):
+        text = value.strip()
+        if not text:
+            continue
+        normalized = text.lower()
+        if normalized in {"unknown", "unknown trigger", "unknown pattern", "n/a", "none"}:
+            continue
+        if normalized == "avoid conditions leading to: unknown":
+            continue
+        return text
+    return ""
 
 
 def _render_skill_md_from_selected(selected: list[TaxonomyEntry]) -> str:
