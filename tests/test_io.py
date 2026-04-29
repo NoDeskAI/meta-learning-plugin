@@ -61,6 +61,17 @@ class TestSignalIO:
         pending = list_pending_signals(tmp_config)
         assert len(pending) == 0
 
+    def test_list_pending_skips_empty_yaml(self, tmp_config, sample_signal):
+        write_signal(sample_signal, tmp_config)
+        Path(tmp_config.signal_buffer_path, "sig-20260429-999.yaml").write_text(
+            "# cleared\n",
+            encoding="utf-8",
+        )
+
+        pending = list_pending_signals(tmp_config)
+
+        assert [sig.signal_id for sig in pending] == [sample_signal.signal_id]
+
     def test_next_signal_id(self, tmp_config):
         sid = next_signal_id(tmp_config)
         assert sid.startswith("sig-")
@@ -83,6 +94,16 @@ class TestExperienceIO:
         write_experience(sample_experience, tmp_config)
         exps = list_all_experiences(tmp_config)
         assert len(exps) == 1
+
+    def test_list_all_skips_empty_yaml(self, tmp_config, sample_experience):
+        write_experience(sample_experience, tmp_config)
+        bad_dir = Path(tmp_config.experience_pool_path) / "_unclassified"
+        bad_dir.mkdir(parents=True, exist_ok=True)
+        (bad_dir / "exp-999.yaml").write_text("# cleared\n", encoding="utf-8")
+
+        exps = list_all_experiences(tmp_config)
+
+        assert [exp.id for exp in exps] == [sample_experience.id]
 
     def test_next_experience_id(self, tmp_config):
         eid = next_experience_id(tmp_config)

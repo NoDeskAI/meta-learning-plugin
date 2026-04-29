@@ -50,8 +50,11 @@ def write_signal(signal: Signal, config: MetaLearningConfig) -> Path:
 
 
 def read_signal(file_path: str | Path) -> Signal:
+    path = Path(file_path)
     with open(file_path, encoding="utf-8") as f:
         raw = yaml.safe_load(f)
+    if not isinstance(raw, dict):
+        raise ValueError(f"Invalid signal file {path}: expected YAML mapping")
     return Signal(**raw)
 
 
@@ -61,7 +64,11 @@ def list_pending_signals(config: MetaLearningConfig) -> list[Signal]:
         return []
     signals = []
     for p in sorted(buf_dir.glob("sig-*.yaml")):
-        sig = read_signal(p)
+        try:
+            sig = read_signal(p)
+        except Exception as exc:
+            logger.warning("Skipping invalid signal file %s: %s", p, exc)
+            continue
         if not sig.processed:
             signals.append(sig)
     return signals
@@ -72,7 +79,15 @@ def mark_signal_processed(signal_id: str, config: MetaLearningConfig) -> None:
     file_path = buf_dir / f"{signal_id}.yaml"
     if not file_path.exists():
         return
-    sig = read_signal(file_path)
+    try:
+        sig = read_signal(file_path)
+    except Exception as exc:
+        logger.warning(
+            "Cannot mark invalid signal file %s processed: %s",
+            file_path,
+            exc,
+        )
+        return
     sig.processed = True
     write_signal(sig, config)
 
@@ -89,8 +104,11 @@ def write_experience(experience: Experience, config: MetaLearningConfig) -> Path
 
 
 def read_experience(file_path: str | Path) -> Experience:
+    path = Path(file_path)
     with open(file_path, encoding="utf-8") as f:
         raw = yaml.safe_load(f)
+    if not isinstance(raw, dict):
+        raise ValueError(f"Invalid experience file {path}: expected YAML mapping")
     return Experience(**raw)
 
 
@@ -100,7 +118,10 @@ def list_all_experiences(config: MetaLearningConfig) -> list[Experience]:
         return []
     experiences = []
     for p in pool_dir.rglob("exp-*.yaml"):
-        experiences.append(read_experience(p))
+        try:
+            experiences.append(read_experience(p))
+        except Exception as exc:
+            logger.warning("Skipping invalid experience file %s: %s", p, exc)
     return experiences
 
 
