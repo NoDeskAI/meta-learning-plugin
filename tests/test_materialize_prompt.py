@@ -2,12 +2,13 @@
 
 from __future__ import annotations
 
+import json
 from datetime import date, datetime
 from unittest.mock import patch
 
 import pytest
 
-from meta_learning.shared.llm_openai import OpenAILLM
+from meta_learning.shared.llm_openai import OpenAILLM, _load_current_deskclaw_llm_config
 from meta_learning.shared.models import (
     MetaLearningConfig,
     Signal,
@@ -16,7 +17,31 @@ from meta_learning.shared.models import (
 
 
 @pytest.fixture
-def openai_llm(tmp_config: MetaLearningConfig) -> OpenAILLM:
+def openai_llm(
+    tmp_config: MetaLearningConfig,
+    tmp_path,
+    monkeypatch: pytest.MonkeyPatch,
+) -> OpenAILLM:
+    settings_path = tmp_path / "deskclaw-settings.json"
+    settings_path.write_text(
+        json.dumps(
+            {
+                "settings.configMode": "default",
+                "settings.gatewayConfig": {
+                    "apiUrl": "https://gateway.example.test/v1",
+                    "apiKey": "test-key",
+                    "model": "test-model",
+                },
+            }
+        ),
+        encoding="utf-8",
+    )
+    monkeypatch.setenv("DESKCLAW_SETTINGS_PATH", str(settings_path))
+    monkeypatch.delenv("META_LEARNING_LLM_BASE_URL", raising=False)
+    monkeypatch.delenv("META_LEARNING_LLM_API_KEY", raising=False)
+    monkeypatch.delenv("META_LEARNING_LLM_MODEL", raising=False)
+    monkeypatch.delenv("META_LEARNING_LLM_TEMPERATURE", raising=False)
+    monkeypatch.delenv("META_LEARNING_LLM_MAX_TOKENS", raising=False)
     return OpenAILLM(tmp_config)
 
 
@@ -34,6 +59,118 @@ def _make_signal(trigger: TriggerReason, user_feedback=None):
         user_feedback=user_feedback,
         step_count=3,
     )
+
+
+class TestDeskClawSettingsConfig:
+
+    def test_default_gateway_config_used(
+        self,
+        tmp_config: MetaLearningConfig,
+        tmp_path,
+        monkeypatch: pytest.MonkeyPatch,
+    ):
+        settings_path = tmp_path / "deskclaw-settings.json"
+        settings_path.write_text(
+            json.dumps(
+                {
+                    "settings.configMode": "default",
+                    "settings.gatewayConfig": {
+                        "apiUrl": "https://gateway.example.test/v1/",
+                        "apiKey": "gateway-key",
+                        "model": "gateway-model",
+                        "temperature": 0.2,
+                        "maxTokens": 1234,
+                    },
+                }
+            ),
+            encoding="utf-8",
+        )
+        monkeypatch.setenv("DESKCLAW_SETTINGS_PATH", str(settings_path))
+        monkeypatch.delenv("META_LEARNING_LLM_BASE_URL", raising=False)
+        monkeypatch.delenv("META_LEARNING_LLM_API_KEY", raising=False)
+        monkeypatch.delenv("META_LEARNING_LLM_MODEL", raising=False)
+        monkeypatch.delenv("META_LEARNING_LLM_TEMPERATURE", raising=False)
+        monkeypatch.delenv("META_LEARNING_LLM_MAX_TOKENS", raising=False)
+
+        loaded = _load_current_deskclaw_llm_config()
+        llm = OpenAILLM(tmp_config)
+
+        assert loaded["base_url"] == "https://gateway.example.test/v1"
+        assert loaded["api_key"] == "gateway-key"
+        assert llm._base_url == "https://gateway.example.test/v1"
+        assert llm._api_key == "gateway-key"
+        assert llm._model == "gateway-model"
+        assert llm._temperature == 0.2
+        assert llm._max_tokens == 1234
+
+    def test_custom_config_selected_in_custom_mode(
+        self,
+        tmp_config: MetaLearningConfig,
+        tmp_path,
+        monkeypatch: pytest.MonkeyPatch,
+    ):
+        settings_path = tmp_path / "deskclaw-settings.json"
+        settings_path.write_text(
+            json.dumps(
+                {
+                    "settings.configMode": "custom",
+                    "settings.gatewayConfig": {
+                        "apiUrl": "https://gateway.example.test/v1",
+                        "apiKey": "gateway-key",
+                        "model": "gateway-model",
+                    },
+                    "settings.customConfig": {
+                        "apiUrl": "https://custom.example.test/v1",
+                        "apiKey": "custom-key",
+                        "model": "custom-model",
+                    },
+                }
+            ),
+            encoding="utf-8",
+        )
+        monkeypatch.setenv("DESKCLAW_SETTINGS_PATH", str(settings_path))
+        monkeypatch.delenv("META_LEARNING_LLM_BASE_URL", raising=False)
+        monkeypatch.delenv("META_LEARNING_LLM_API_KEY", raising=False)
+        monkeypatch.delenv("META_LEARNING_LLM_MODEL", raising=False)
+
+        llm = OpenAILLM(tmp_config)
+
+        assert llm._base_url == "https://custom.example.test/v1"
+        assert llm._api_key == "custom-key"
+        assert llm._model == "custom-model"
+
+    def test_environment_overrides_deskclaw_settings(
+        self,
+        tmp_config: MetaLearningConfig,
+        tmp_path,
+        monkeypatch: pytest.MonkeyPatch,
+    ):
+        settings_path = tmp_path / "deskclaw-settings.json"
+        settings_path.write_text(
+            json.dumps(
+                {
+                    "settings.configMode": "default",
+                    "settings.apiUrl": "https://settings.example.test/v1",
+                    "settings.apiKey": "settings-key",
+                    "settings.model": "settings-model",
+                }
+            ),
+            encoding="utf-8",
+        )
+        monkeypatch.setenv("DESKCLAW_SETTINGS_PATH", str(settings_path))
+        monkeypatch.setenv("META_LEARNING_LLM_BASE_URL", "https://env.example.test/v1")
+        monkeypatch.setenv("META_LEARNING_LLM_API_KEY", "env-key")
+        monkeypatch.setenv("META_LEARNING_LLM_MODEL", "env-model")
+        monkeypatch.setenv("META_LEARNING_LLM_TEMPERATURE", "0.9")
+        monkeypatch.setenv("META_LEARNING_LLM_MAX_TOKENS", "99")
+
+        llm = OpenAILLM(tmp_config)
+
+        assert llm._base_url == "https://env.example.test/v1"
+        assert llm._api_key == "env-key"
+        assert llm._model == "env-model"
+        assert llm._temperature == 0.9
+        assert llm._max_tokens == 99
 
 
 class TestMaterializePromptDifferentiation:
@@ -60,6 +197,30 @@ class TestMaterializePromptDifferentiation:
 
         assert "USER CORRECTION MODE" in captured["system"]
         assert "INSTRUCTION EXTRACTION" in captured["system"]
+
+    @pytest.mark.asyncio
+    async def test_user_correction_uses_source_language(self, openai_llm):
+        signal = _make_signal(
+            TriggerReason.USER_CORRECTION,
+            user_feedback="以后遇到不确定的需求时，必须先问我",
+        )
+        captured = {}
+
+        async def mock_chat_json(system, user):
+            captured["system"] = system
+            captured["user"] = user
+            return {
+                "scene": "记录中文规则", "failure_signature": None,
+                "root_cause": "未确认需求",
+                "resolution": "不确定时先询问用户",
+                "meta_insight": "遇到不确定需求必须先问用户",
+                "task_type": "configuration",
+            }
+
+        with patch.object(openai_llm, "_chat_json", side_effect=mock_chat_json):
+            await openai_llm.materialize_signal(signal, "用户使用中文反馈")
+
+        assert "TARGET OUTPUT LANGUAGE: Simplified Chinese" in captured["system"]
 
     @pytest.mark.asyncio
     async def test_user_correction_reorders_user_message(self, openai_llm):
@@ -208,3 +369,37 @@ class TestExtractTaxonomySingleExperience:
 
         assert result.name == "Ask User"
         assert result.keywords == ["ask_user"]
+
+    @pytest.mark.asyncio
+    async def test_extract_taxonomy_uses_experience_language(self, openai_llm):
+        from meta_learning.shared.models import Experience, TaskType
+
+        exp = Experience(
+            id="exp-001",
+            task_type=TaskType.CONFIGURATION,
+            created_at=datetime.now(),
+            source_signal="sig-001",
+            confidence=0.6,
+            scene="用户要求记录中文规则",
+            failure_signature=None,
+            root_cause="不确定需求时没有询问用户",
+            resolution="遇到不确定点必须使用 ask_user 询问用户",
+            meta_insight="不确定时先问用户，不要猜测",
+        )
+        captured = {}
+
+        async def mock_chat_json(system, _user):
+            captured["system"] = system
+            return {
+                "name": "不确定时先询问用户",
+                "trigger": "需求不清楚或存在歧义时",
+                "fix_sop": "1. 暂停执行\n2. 调用 ask_user 询问用户",
+                "prevention": "遇到不确定点必须先问用户，不要猜测",
+                "keywords": ["ask_user", "确认需求"],
+            }
+
+        with patch.object(openai_llm, "_chat_json", side_effect=mock_chat_json):
+            result = await openai_llm.extract_taxonomy([exp])
+
+        assert "TARGET OUTPUT LANGUAGE: Simplified Chinese" in captured["system"]
+        assert result.name == "不确定时先询问用户"

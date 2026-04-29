@@ -162,9 +162,6 @@ class QuickThinkConfig(BaseModel):
         ]
     )
     max_latency_ms: int = 50
-    vector_fallback_enabled: bool = True
-    vector_similarity_threshold: float = 0.65
-    vector_top_k: int = 3
 
 
 class SignalCaptureConfig(BaseModel):
@@ -210,29 +207,6 @@ class ConfidenceConfig(BaseModel):
     promote_threshold: float = 0.8
     decay_enabled: bool = True
     decay_base: float = 0.95
-
-
-class DashScopeConfig(BaseModel):
-    """Configuration for DashScope multimodal embedding (qwen3-vl-embedding).
-
-    The API key is read from the ``DASHSCOPE_API_KEY`` environment variable by
-    default.  A hard-coded fallback is provided **only** for local development;
-    rotate / revoke it before deploying to production.
-    """
-
-    api_key: str = Field(
-        default_factory=lambda: _env_or(
-            "DASHSCOPE_API_KEY",
-            "sk-dcae1026f5f34f748183bd66fcaaae89",  # dev-only fallback — rotate before prod
-        )
-    )
-    base_url: str = (
-        "https://dashscope.aliyuncs.com/api/v1"
-        "/services/embeddings/multimodal-embedding/multimodal-embedding"
-    )
-    model: str = "qwen3-vl-embedding"
-    dimension: int = 1024
-    enabled: bool = True
 
 
 class LLMConfig(BaseModel):
@@ -423,7 +397,6 @@ class MetaLearningConfig(BaseModel):
     layer3: Layer3Config = Field(default_factory=Layer3Config)
     confidence: ConfidenceConfig = Field(default_factory=ConfidenceConfig)
     llm: LLMConfig = Field(default_factory=LLMConfig)
-    dashscope: DashScopeConfig = Field(default_factory=DashScopeConfig)
     experiment: ExperimentConfig = Field(default_factory=ExperimentConfig)
 
     def resolve_workspace_path(self, relative: str) -> str:

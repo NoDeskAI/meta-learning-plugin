@@ -3,8 +3,6 @@ from __future__ import annotations
 import logging
 from collections import defaultdict
 from datetime import datetime
-from pathlib import Path
-from typing import Callable
 
 import numpy as np
 from scipy.cluster.hierarchy import fcluster, linkage
@@ -15,7 +13,6 @@ from meta_learning.shared.io import (
     load_error_taxonomy,
     load_experience_index,
     next_cluster_id,
-    read_signal,
     save_experience_index,
     write_experience,
 )
@@ -29,15 +26,6 @@ from meta_learning.shared.models import (
 )
 
 logger = logging.getLogger(__name__)
-
-EmbeddingFn = Callable[[str], list[float]]
-_get_embedding: EmbeddingFn | None = None
-
-
-def set_embedding_fn(fn: EmbeddingFn | None) -> None:
-    global _get_embedding  # noqa: PLW0603
-    _get_embedding = fn
-
 
 _STRIP_CHARS = ".:,;()[]{}\"'`<>!?/\\#@$%^&*+=~|"
 
@@ -120,15 +108,6 @@ def _experience_text(exp: Experience) -> str:
     return " ".join(parts)
 
 
-def _cosine_similarity(vec_a: list[float], vec_b: list[float]) -> float:
-    dot = sum(a * b for a, b in zip(vec_a, vec_b))
-    norm_a = sum(a * a for a in vec_a) ** 0.5
-    norm_b = sum(b * b for b in vec_b) ** 0.5
-    if norm_a == 0 or norm_b == 0:
-        return 0.0
-    return dot / (norm_a * norm_b)
-
-
 def _keyword_similarity(exp_a: Experience, exp_b: Experience) -> float:
     """Jaccard-like overlap on meaningful tokens.  O(len(text)) per pair."""
     words_a = _tokenize(_experience_text(exp_a))
@@ -140,10 +119,6 @@ def _keyword_similarity(exp_a: Experience, exp_b: Experience) -> float:
 
 
 def _compute_similarity(exp_a: Experience, exp_b: Experience) -> float:
-    if _get_embedding is not None:
-        vec_a = _get_embedding(_experience_text(exp_a))
-        vec_b = _get_embedding(_experience_text(exp_b))
-        return _cosine_similarity(vec_a, vec_b)
     return _keyword_similarity(exp_a, exp_b)
 
 
@@ -324,41 +299,3 @@ def _replace_task_clusters(
 ) -> list[ExperienceCluster]:
     keep_other = [c for c in index.clusters if c.task_type != task_type]
     return keep_other + clusters_for_task
-
-
-def _resolve_experience_image_paths(
-    experiences: list[Experience],
-    config: MetaLearningConfig,
-) -> dict[str, list[str]]:
-    text_to_images: dict[str, list[str]] = {}
-    signal_dir = Path(config.signal_buffer_path)
-    if not signal_dir.exists():
-        return text_to_images
-
-    for exp in experiences:
-        sig_path = signal_dir / f"{exp.source_signal}.yaml"
-        if not sig_path.exists():
-            continue
-        try:
-            signal = read_signal(sig_path)
-        except Exception:
-            continue
-        if not signal.image_snapshots:
-            continue
-        text_key = _experience_text(exp)
-        text_to_images[text_key] = signal.image_snapshots
-
-    return text_to_images
-
-
-def bootstrap_multimodal_embedding(config: MetaLearningConfig) -> None:
-    if not config.dashscope.enabled:
-        return
-
-    from meta_learning.shared.embedding_dashscope import MultimodalEmbedding
-
-    all_exps = list_all_experiences(config)
-    image_lookup = _resolve_experience_image_paths(all_exps, config)
-
-    embedding = MultimodalEmbedding(config.dashscope)
-    set_embedding_fn(embedding.make_embedding_fn(image_lookup))

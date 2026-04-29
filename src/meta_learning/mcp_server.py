@@ -20,7 +20,6 @@ from mcp.server.fastmcp import FastMCP
 
 from meta_learning.layer1.quick_think import QuickThinkIndex
 from meta_learning.layer1.signal_capture import SignalCapture
-from meta_learning.layer2.consolidate import bootstrap_multimodal_embedding
 from meta_learning.shared.io import (
     boost_taxonomy_confidence,
     enrich_from_session,
@@ -114,22 +113,6 @@ _layer2_task: asyncio.Task | None = None
 _layer2_thread: threading.Thread | None = None
 
 
-def _make_embedding_fn(config: MetaLearningConfig):
-    """Create an embedding function if DashScope + vector fallback are enabled."""
-    if not config.dashscope.enabled:
-        return None
-    if not config.layer1.quick_think.vector_fallback_enabled:
-        return None
-    try:
-        from meta_learning.shared.embedding_dashscope import MultimodalEmbedding
-        emb = MultimodalEmbedding(config.dashscope)
-        logger.info("Vector fallback enabled (DashScope %s)", config.dashscope.model)
-        return emb.embed_text_only
-    except Exception:
-        logger.warning("Failed to create embedding function, vector fallback disabled", exc_info=True)
-        return None
-
-
 def _get_quick_think_index() -> QuickThinkIndex:
     global _qt_index, _taxonomy_mtime
 
@@ -141,8 +124,7 @@ def _get_quick_think_index() -> QuickThinkIndex:
     if _qt_index is None or current_mtime != _taxonomy_mtime:
         taxonomy = load_error_taxonomy(config)
         if _qt_index is None:
-            embedding_fn = _make_embedding_fn(config)
-            _qt_index = QuickThinkIndex(taxonomy, config, embedding_fn=embedding_fn)
+            _qt_index = QuickThinkIndex(taxonomy, config)
         else:
             _qt_index.update_taxonomy(taxonomy)
         _taxonomy_mtime = current_mtime
@@ -170,7 +152,6 @@ async def _run_layer2_background(config: MetaLearningConfig) -> None:
     bg_orchestrator = Layer2Orchestrator(config, _create_llm(config))
     bg_orchestrator.mark_running()
     try:
-        bootstrap_multimodal_embedding(config)
         result = await bg_orchestrator.run_pipeline()
         bg_orchestrator.mark_completed(result)
         logger.info(
@@ -298,6 +279,8 @@ mcp = FastMCP(
         "Use `quick_think` before executing risky tasks to get risk assessments. "
         "Use `capture_signal` after completing a task to record learning signals — "
         "Layer 2 consolidation runs automatically in the background when needed. "
+        "If you need to wait for or verify learning completion, prefer spawning a "
+        "separate learning worker and let the main user conversation continue. "
         "Use `status` to check the learning system state."
     ),
 )
@@ -363,6 +346,9 @@ async def capture_signal(
 
     If Layer 2 trigger conditions are met, the consolidation pipeline runs
     automatically in the background — no need to call run_layer2 separately.
+    If you need to monitor completion or verify generated rules, spawn a
+    separate learning worker to call layer2_status; do not keep the main user
+    conversation blocked on learning progress.
 
     Call this AFTER completing a task, especially when:
     - You encountered and fixed errors
@@ -429,7 +415,9 @@ async def capture_signal(
         result += (
             f"\n\nLayer 2 triggered in background "
             f"({len(pending)} pending signal(s)). "
-            f"Learning takes ~1-2 minutes. Call `layer2_status` to check progress."
+            "Learning takes ~1-2 minutes. If completion must be verified, spawn "
+            "a separate learning worker to poll `layer2_status` and notify the "
+            "original conversation; keep the main response unblocked."
         )
     elif pending and reason == "already running in this process":
         result += "\n\nLayer 2 is already running in the background."
@@ -452,7 +440,6 @@ async def run_layer2(force: bool = False) -> str:
         force: Run even if trigger conditions are not met.
     """
     config = _get_config()
-    bootstrap_multimodal_embedding(config)
     llm = _create_llm(config)
 
     from meta_learning.layer2.orchestrator import Layer2Orchestrator
@@ -487,8 +474,9 @@ async def layer2_status() -> str:
     """Check the current Layer 2 pipeline status.
 
     Returns whether the pipeline is idle, running, completed, or failed,
-    along with timing and result details. Use this after capture_signal
-    to confirm learning has been applied before relying on new rules.
+    along with timing and result details. When waiting for background learning
+    after capture_signal, prefer calling this from a spawned learning worker so
+    the main user conversation is not blocked by polling.
     """
     config = _get_config()
 

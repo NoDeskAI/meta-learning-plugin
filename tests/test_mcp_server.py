@@ -228,6 +228,7 @@ class TestCaptureSignal:
         assert "Signal captured" in result
         assert "user_correction" in result
         assert "Layer 2 triggered in background" in result
+        assert "spawn a separate learning worker" in result
 
 
 # -----------------------------------------------------------------------
@@ -306,18 +307,6 @@ class TestRunLayer2:
 
         result = await run_layer2(force=True)
         assert "Layer 2 complete" in result
-
-    @pytest.mark.usefixtures("_env")
-    @pytest.mark.asyncio
-    async def test_bootstrap_multimodal_embedding_called(self):
-        from meta_learning.mcp_server import run_layer2
-
-        with patch(
-            "meta_learning.mcp_server.bootstrap_multimodal_embedding"
-        ) as mock_bootstrap:
-            await run_layer2(force=True)
-            mock_bootstrap.assert_called_once()
-
 
 # -----------------------------------------------------------------------
 # sync_taxonomy_to_nobot

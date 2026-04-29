@@ -46,6 +46,61 @@ class TestQuickThinkKeywordMatch:
         assert "keyword_taxonomy_hit" in result.matched_signals
         assert "tax-test-001" in result.matched_taxonomy_entries
 
+    def test_local_fuzzy_match_without_exact_keyword(self, tmp_config):
+        entry = TaxonomyEntry(
+            id="tax-clarify-001",
+            name="Ask User When Requirements Are Unclear",
+            trigger="ambiguous requirements or missing decision context",
+            fix_sop="pause and ask the user for clarification before proceeding",
+            prevention="never guess when the requirement is unclear",
+            confidence=0.9,
+            source_exps=["exp-001"],
+            keywords=["clarification", "ambiguous requirements"],
+            created_at=date.today(),
+            last_verified=date.today(),
+        )
+        tax = ErrorTaxonomy()
+        tax.add_entry("configuration", "requirements", entry)
+        idx = QuickThinkIndex(tax, tmp_config)
+
+        ctx = TaskContext(
+            task_description="the user request is unclear and missing context",
+            tools_used=["ask_user"],
+        )
+
+        result = idx.evaluate(ctx)
+
+        assert result.hit is True
+        assert "keyword_taxonomy_hit" in result.matched_signals
+        assert "tax-clarify-001" in result.matched_taxonomy_entries
+
+    def test_local_fuzzy_match_for_chinese_rule(self, tmp_config):
+        entry = TaxonomyEntry(
+            id="tax-cn-clarify-001",
+            name="不确定时先询问用户",
+            trigger="需求不清楚、存在歧义或缺少必要信息时",
+            fix_sop="暂停执行，使用 ask_user 向用户确认后再继续",
+            prevention="遇到不确定点必须先问用户，不要猜测",
+            confidence=0.9,
+            source_exps=["exp-001"],
+            keywords=["确认需求", "不确定"],
+            created_at=date.today(),
+            last_verified=date.today(),
+        )
+        tax = ErrorTaxonomy()
+        tax.add_entry("configuration", "requirements", entry)
+        idx = QuickThinkIndex(tax, tmp_config)
+
+        ctx = TaskContext(
+            task_description="用户的要求有些模糊，缺少必要上下文",
+            tools_used=["ask_user"],
+        )
+
+        result = idx.evaluate(ctx)
+
+        assert result.hit is True
+        assert "tax-cn-clarify-001" in result.matched_taxonomy_entries
+
 
 class TestQuickThinkIrreversibleOps:
     def test_detects_rm_rf(self, tmp_config):

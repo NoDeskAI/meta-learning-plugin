@@ -1,7 +1,8 @@
 """OpenAI-compatible LLM implementation for meta-learning pipeline.
 
 Supports any OpenAI-compatible API (OpenAI, OneRouter, local proxies, etc.)
-by configuring base_url and api_key via MetaLearningConfig.llm settings.
+using the active DeskClaw settings file, with explicit environment variable
+overrides for deployments and tests.
 """
 
 from __future__ import annotations
@@ -38,20 +39,154 @@ from meta_learning.shared.models import (
 logger = logging.getLogger(__name__)
 
 
+def _contains_cjk(text: str) -> bool:
+    return any(
+        "\u4e00" <= ch <= "\u9fff"
+        or "\u3400" <= ch <= "\u4dbf"
+        or "\uf900" <= ch <= "\ufaff"
+        for ch in text
+    )
+
+
+def _target_language_instruction(*parts: str) -> str:
+    combined = "\n".join(part for part in parts if part)
+    if _contains_cjk(combined):
+        return (
+            "TARGET OUTPUT LANGUAGE: Simplified Chinese. The learned output must "
+            "use the same primary language as the source interaction. Write all "
+            "natural-language JSON fields in fluent Simplified Chinese; keep code, "
+            "commands, file paths, tool names, and API identifiers unchanged."
+        )
+    return (
+        "TARGET OUTPUT LANGUAGE: English. Write natural-language JSON fields in "
+        "English unless the source interaction is primarily in another language; "
+        "keep code, commands, file paths, tool names, and API identifiers unchanged."
+    )
+
+
+def _experience_language_text(experiences: list[Experience]) -> str:
+    chunks: list[str] = []
+    for exp in experiences[:10]:
+        chunks.extend(
+            [
+                exp.scene,
+                exp.failure_signature or "",
+                exp.root_cause,
+                exp.resolution,
+                exp.meta_insight,
+            ]
+        )
+    return "\n".join(chunks)
+
+
+def _as_dict(value: Any) -> dict[str, Any]:
+    return value if isinstance(value, dict) else {}
+
+
+def _pick_llm_value(
+    selected: dict[str, Any],
+    settings: dict[str, Any],
+    *names: str,
+) -> Any:
+    for name in names:
+        value = selected.get(name)
+        if value is not None and value != "":
+            return value
+    for name in names:
+        value = settings.get(f"settings.{name}")
+        if value is not None and value != "":
+            return value
+    return None
+
+
+def _load_current_deskclaw_llm_config() -> dict[str, Any]:
+    """Best-effort read of the active DeskClaw LLM configuration."""
+    path = Path(
+        os.environ.get("DESKCLAW_SETTINGS_PATH", "~/.deskclaw/deskclaw-settings.json")
+    ).expanduser()
+    try:
+        settings = json.loads(path.read_text(encoding="utf-8"))
+    except Exception:
+        return {}
+    if not isinstance(settings, dict):
+        return {}
+
+    mode = str(
+        settings.get("settings.configMode")
+        or settings.get("configMode")
+        or "default"
+    )
+    custom = _as_dict(
+        settings.get("settings.customConfig") or settings.get("customConfig")
+    )
+    gateway = _as_dict(
+        settings.get("settings.gatewayConfig") or settings.get("gatewayConfig")
+    )
+    selected = custom if mode == "custom" and custom else gateway
+
+    base_url = _pick_llm_value(
+        selected,
+        settings,
+        "apiUrl",
+        "api_url",
+        "baseUrl",
+        "base_url",
+    )
+    api_key = _pick_llm_value(selected, settings, "apiKey", "api_key", "key")
+    model = _pick_llm_value(selected, settings, "model")
+    temperature = _pick_llm_value(selected, settings, "temperature")
+    max_tokens = _pick_llm_value(selected, settings, "maxTokens", "max_tokens")
+
+    result: dict[str, Any] = {}
+    if base_url:
+        result["base_url"] = str(base_url).rstrip("/")
+    if api_key:
+        result["api_key"] = str(api_key)
+    if model:
+        result["model"] = str(model)
+    if temperature is not None:
+        result["temperature"] = temperature
+    if max_tokens is not None:
+        result["max_tokens"] = max_tokens
+    return result
+
+
 class OpenAILLM(LLMInterface):
     def __init__(self, config: MetaLearningConfig) -> None:
         self._config = config
-        self._base_url = os.environ.get(
-            "META_LEARNING_LLM_BASE_URL",
-            "https://llm-gateway-api.nodesk.tech/default/v1",
+        current = _load_current_deskclaw_llm_config()
+        self._base_url = (
+            os.environ.get("META_LEARNING_LLM_BASE_URL")
+            or current.get("base_url")
+            or ""
         )
-        self._api_key = os.environ.get(
-            "META_LEARNING_LLM_API_KEY",
-            "nd-9f27abd1325015b7932ea4c8b54c4fdc889f0496c1f5f2b3bf24e80fd7f19895",
+        self._api_key = (
+            os.environ.get("META_LEARNING_LLM_API_KEY")
+            or current.get("api_key")
+            or ""
         )
-        self._model = config.llm.model
-        self._temperature = config.llm.temperature
-        self._max_tokens = config.llm.max_tokens
+        self._model = (
+            os.environ.get("META_LEARNING_LLM_MODEL")
+            or current.get("model")
+            or config.llm.model
+        )
+        self._temperature = float(
+            os.environ.get("META_LEARNING_LLM_TEMPERATURE")
+            or current.get("temperature")
+            or config.llm.temperature
+        )
+        self._max_tokens = int(
+            os.environ.get("META_LEARNING_LLM_MAX_TOKENS")
+            or current.get("max_tokens")
+            or config.llm.max_tokens
+        )
+
+        if not self._base_url:
+            raise RuntimeError(
+                "Meta-learning LLM is not configured. Configure "
+                "~/.deskclaw/deskclaw-settings.json or provide "
+                "META_LEARNING_LLM_BASE_URL."
+            )
 
     def _append_io_audit(self, event: str, payload: dict[str, Any]) -> None:
         audit_dir = Path(self._config.workspace_root).expanduser() / "audit"
@@ -68,12 +203,12 @@ class OpenAILLM(LLMInterface):
 
     async def _chat(self, system: str, user: str) -> str:
         async with httpx.AsyncClient(timeout=120.0) as client:
+            headers = {"Content-Type": "application/json"}
+            if self._api_key:
+                headers["Authorization"] = f"Bearer {self._api_key}"
             resp = await client.post(
                 f"{self._base_url}/chat/completions",
-                headers={
-                    "Authorization": f"Bearer {self._api_key}",
-                    "Content-Type": "application/json",
-                },
+                headers=headers,
                 json={
                     "model": self._model,
                     "temperature": self._temperature,
@@ -152,6 +287,13 @@ class OpenAILLM(LLMInterface):
         signal: Signal,
         session_context: str,
     ) -> MaterializeResult:
+        language_instruction = _target_language_instruction(
+            signal.user_feedback or "",
+            signal.task_summary,
+            signal.resolution_snapshot or "",
+            signal.error_snapshot or "",
+            session_context[:3000],
+        )
         system = """You are a meta-learning analyst for AI agents. Given a learning signal
 and session context, extract structured experience data. Respond with JSON containing:
 - scene: string (what the agent was tasked with — read the FULL context carefully)
@@ -171,6 +313,7 @@ ANALYSIS GUIDELINES:
    - Professional documents: requirement coverage, domain standard adherence, formatting conventions, data accuracy, citation quality.
    - Coding/DevOps: testing discipline, dependency management, error handling, edge case coverage.
 """
+        system += f"\n{language_instruction}\n"
         if (
             signal.trigger_reason == TriggerReason.USER_CORRECTION
             and signal.user_feedback
@@ -270,6 +413,9 @@ Experience B:
         self,
         experiences: list[Experience],
     ) -> TaxonomyExtraction:
+        language_instruction = _target_language_instruction(
+            _experience_language_text(experiences)
+        )
         system = """You extract a taxonomy entry from a cluster of similar experiences.
 
 CRITICAL DISTINCTION — two kinds of knowledge to extract:
@@ -301,6 +447,7 @@ IMPORTANT:
   from the experiences — these are the learned knowledge, not noise to be generalized away.
 - The entry must still be TRANSFERABLE: applicable to similar future tasks, not just the exact
   task in the experiences."""
+        system += f"\n\n{language_instruction}"
 
         exp_summaries = "\n\n".join(
             f"[{e.id}] {e.scene}\n  Failure: {e.failure_signature}\n  Root cause: {e.root_cause}\n  Resolution: {e.resolution}"
