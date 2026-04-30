@@ -345,39 +345,83 @@ mcp = FastMCP(
 # Tools
 # ---------------------------------------------------------------------------
 
+_CORRECTION_PATTERNS_ZH = [
+    "不对", "错了", "搞错", "做错", "弄错", "你的方法不对",
+    "应该是", "而不是", "不是这样", "你理解错了", "我说的是",
+    "重新", "改一下", "重做", "你没有按", "你没理解",
+]
+_CORRECTION_PATTERNS_EN = [
+    "wrong", "incorrect", "that's not what i",
+    "you misunderstood", "i said", "not what i asked",
+    "redo", "fix it", "try again", "no, i want",
+]
+
+
+def _detect_user_correction(text: str) -> bool:
+    lower = text.lower()
+    for p in _CORRECTION_PATTERNS_ZH:
+        if p in lower:
+            return True
+    for p in _CORRECTION_PATTERNS_EN:
+        if p in lower:
+            return True
+    return False
+
+
 @mcp.tool()
 def quick_think(
     user_message: str,
     tools_used: list[str] | str | None = None,
 ) -> str:
-    """Assess risk of a task before execution.
+    """Analyze a user message before acting on it.
 
-    Checks the user message against known error patterns (taxonomy) and
-    irreversible-operation keywords. Returns a risk warning if any match,
-    otherwise returns "no risk detected".
-
-    Call this BEFORE executing a task that might involve destructive operations
-    or areas where you have previously made mistakes.
+    YOU MUST call this as your FIRST tool call for EVERY user message.
+    It detects corrections, checks known error patterns, and tells you
+    exactly what to do next (e.g. call mcp_meta-learning_capture_signal).
 
     Args:
-        user_message: The user's task description / latest message.
+        user_message: The user's latest message (paste it verbatim).
         tools_used: Names of tools you plan to use (optional). Prefer a real
             array of strings, e.g. ["read_file"]; a single string is accepted.
     """
     config = _get_config()
-    index = _get_quick_think_index()
+    sections: list[str] = []
 
+    is_correction = _detect_user_correction(user_message)
+    if is_correction:
+        escaped = user_message.replace('"', '\\"')[:300]
+        sections.append(
+            "⚠️ USER CORRECTION DETECTED\n"
+            "The user is correcting your previous approach.\n"
+            "You MUST call `capture_signal` as your next tool call:\n"
+            f'  capture_signal(task_description="<brief task summary>", '
+            f'user_corrections=["{escaped}"])\n'
+            "Do this BEFORE fixing the issue."
+        )
+
+    index = _get_quick_think_index()
     context = TaskContext(
         task_description=user_message,
         tools_used=_coerce_str_list(tools_used),
     )
     result = index.evaluate(context)
 
-    if not result.hit:
-        return "no risk detected"
+    if result.hit:
+        taxonomy = load_error_taxonomy(config)
+        sections.append(_format_risk_warning(result, taxonomy))
 
-    taxonomy = load_error_taxonomy(config)
-    return _format_risk_warning(result, taxonomy)
+    if not sections:
+        sections.append("no risk detected")
+
+    sections.append(
+        "\n📋 After completing this task, call `capture_signal` if any of these occurred:\n"
+        "  - You encountered and fixed errors (errors_encountered=[...], errors_fixed=True)\n"
+        "  - An error remains unresolved (errors_encountered=[...], errors_fixed=False)\n"
+        "  - You used a tool for the first time (new_tools=[...])\n"
+        "  - The task took many steps (step_count=N)"
+    )
+
+    return "\n\n".join(sections)
 
 
 @mcp.tool()
